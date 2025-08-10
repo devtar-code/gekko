@@ -1,11 +1,5 @@
-# This repo is not maintained anymore
+# This repo forked from original authored by Mike van Rossum or @askmike
 
-I am officially not maintaining this project anymore. It was an amazing journey and I want to thank everyone for
-playing the role in this amazing story!
-
-More details can be found here: [https://medium.com/@gekkoplus/archiving-open-source-gekko-dba02e6efc7](https://medium.com/@gekkoplus/archiving-open-source-gekko-dba02e6efc7)
-
-This only impacts my Gekko repo (askmike/gekko). There might be other forks of Gekko out there that are being maintained!
 
 ------
 
