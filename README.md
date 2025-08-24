@@ -1,4 +1,4 @@
-# This repo forked from original authored by Mike van Rossum or @askmike
+# This repo is forked from original authored by Mike van Rossum or @askmike
 
 
 ------
