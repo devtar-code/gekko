@@ -20,7 +20,7 @@ To get Gekko running you need to do the following:
 
 ## Installing nodejs
 
-Gekko requires [nodejs](https://nodejs.org/en/) to be installed. Go ahead and install this if it's not already (Gekko requires at least version 8.11.2). We advice to download the current LTS.
+Gekko requires [nodejs](https://nodejs.org/en/) to be installed. Go ahead and install this if it's not already (Gekko requires at least version 18.0.0). We recommend downloading the current LTS version.
 
 ## Installing git
 
@@ -41,20 +41,40 @@ Alternatively you can manually download the latest stable version of Gekko on th
 
 Once you have Gekko downloaded you need to install the dependencies, open your terminal and navigate to the gekko folder and run:
 
-    npm install --only=production
+    npm install
 
-*NOTE: You may see a vulnerability warning from NPM, if you run npm audit with --force, Gekko will break. See [here](https://github.com/askmike/gekko/issues/2585#issuecomment-428450997).*
+*NOTE: You may see vulnerability warnings from NPM. These are mostly in development dependencies and don't affect the core functionality.*
 
 You also need to install Gekko Broker's dependencies, run:
 
     cd exchange
-    npm install --only=production
+    npm install
     cd ..
+
+### Installing Vue UI dependencies (Optional but Recommended)
+
+For the modern web interface, install Vue UI dependencies:
+
+    cd web/vue
+    npm install
+    cd ../..
 
 ## Starting Gekko
 
 After all the above you can start Gekko by running the following in your terminal:
 
+### Option 1: Start with Web UI (Recommended)
+    npm start
+
+This will start Gekko with the web interface at `http://localhost:3000`
+
+### Option 2: Start Vue UI Development Server
+    cd web/vue
+    npm run serve
+
+This starts the Vue development server at `http://localhost:8080`
+
+### Option 3: Command Line Mode
     node gekko --ui
 
 ## Updating Gekko
