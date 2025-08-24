@@ -2,12 +2,12 @@
 .grd
   .grd-row
     .grd-row-col-3-6.px1
-      h3 Strategy
+      h3 Risk Appetite
       div
-        label(for='strat').wrapper Strategy:
+        label(for='risk').wrapper Risk Level:
         .custom-select.button
-          select(v-model='strategy')
-            option(v-for='strat in strategies') {{ strat.name }}
+          select(v-model='riskAppetite')
+            option(v-for='risk in riskOptions' :value='risk.value') {{ risk.label }}
       div
         label(for='candleSize') Candle Size
         .grd-row
@@ -26,7 +26,7 @@
     .grd-row-col-3-6.px1
       div
         h3 Parameters
-        p {{ strategy }} Parameters:
+        p Parameters:
         textarea.params(v-model='rawStratParams')
         p.bg--red.p1(v-if='rawStratParamsError') {{ rawStratParamsError.message }}
 </template>
@@ -38,21 +38,33 @@ import { get } from '../../../tools/ajax'
 
 export default {
   data: () => {
-    return {
-      strategies: [],
+      return {
+        strategies: [],
 
-      candleSizeUnit: 'hours',
-      rawCandleSize: 1,
+        candleSizeUnit: 'hours',
+        rawCandleSize: 1,
 
-      strategy: 'MACD',
-      historySize: 10,
+        riskAppetite: 'balanced',
+        riskOptions: [
+          { value: 'conservative', label: 'Conservative' },
+          { value: 'balanced', label: 'Balanced' },
+          { value: 'aggressive', label: 'Aggressive' }
+        ],
+        riskStrategyMap: {
+          conservative: 'RSI',
+          balanced: 'MACD',
+          aggressive: 'PPO'
+        },
 
-      rawStratParams: '',
-      rawStratParamsError: false,
+        strategy: 'MACD',
+        historySize: 10,
 
-      emptyStrat: false,
-      stratParams: {}
-    };
+        rawStratParams: '',
+        rawStratParamsError: false,
+
+        emptyStrat: false,
+        stratParams: {}
+      };
   },
   created: function () {
     get('strategies', (err, data) => {
@@ -62,12 +74,16 @@ export default {
           s.empty = s.params === '';
         });
 
+        this.strategy = this.riskStrategyMap[this.riskAppetite];
         this.rawStratParams = _.find(this.strategies, { name: this.strategy }).params;
         this.emptyStrat = _.find(this.strategies, { name: this.strategy }).empty;
         this.emitConfig();
     });
   },
   watch: {
+    riskAppetite: function(level) {
+      this.strategy = this.riskStrategyMap[level];
+    },
     strategy: function(strat) {
       strat = _.find(this.strategies, { name: strat });
       this.rawStratParams = strat.params;
