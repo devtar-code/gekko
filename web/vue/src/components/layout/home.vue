@@ -5,10 +5,15 @@
       img(src='static/gekko.jpg')
       p
         em The most valuable commodity I know of is information.
+      p
+        | Current BTC price (USD):
+        span(v-if='btcPrice !== null') {{ formatPrice(btcPrice) }}
+        span(v-else) Loading...
 </template>
 
 <script>
 import marked from '../../tools/marked';
+import request from 'superagent';
 
 const left = marked(`
 
@@ -27,7 +32,27 @@ and runs on nodejs.
 export default {
   data: () => {
     return {
-      left
+      left,
+      btcPrice: null
+    }
+  },
+  created() {
+    this.fetchPrice();
+  },
+  methods: {
+    fetchPrice() {
+      request
+        .get('https://api.coindesk.com/v1/bpi/currentprice/USD.json')
+        .then(res => {
+          const data = JSON.parse(res.text);
+          this.btcPrice = data.bpi.USD.rate_float;
+        })
+        .catch(() => {
+          this.btcPrice = null;
+        });
+    },
+    formatPrice(value) {
+      return '$' + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
   }
 }

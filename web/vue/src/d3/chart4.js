@@ -46,7 +46,9 @@ export default function(_data, _trades, _height) {
 
   var xAxis = d3.axisBottom(x),
       xAxis2 = d3.axisBottom(x2),
-      yAxis = d3.axisLeft(y).ticks(_height / 50);
+      yAxis = d3.axisLeft(y)
+        .ticks(_height / 50)
+        .tickFormat(d3.format(',.2f'));
 
   var brush = d3.brushX()
       .extent([[0, 0], [width, height2]])
