@@ -36,7 +36,7 @@ NOTE: The API does not have dedicated versioning, instead it uses the version of
 
 ### GET /api/strategies
 
-Get all strategies known to this Gekko. The value of the `params` key is a TOML string.
+Get all strategies known to this Gekko. The value of the `params` key is a TOML string. Each strategy may also include a `description` and `category` to help with discovery in the UI.
 
 **response**
 
@@ -44,20 +44,16 @@ Get all strategies known to this Gekko. The value of the `params` key is a TOML 
 [
   {
     "name": "DEBUG_single-advice",
-    "params": ""
-  },
-  {
-    "name": "DEBUG_toggle-advice",
-    "params": ""
-  },
-  {
-    "name": "DEMA",
-    "params": "weight = 21\n\n[thresholds]\ndown = -0.025\nup = 0.025\n"
+    "params": "",
+    "description": "",
+    "category": ""
   },
   {
     "name": "MACD",
-    "params": "short = 10\nlong = 21\nsignal = 9\n\n[thresholds]\ndown = -0.025\nup = 0.025\npersistence = 1"
-  },
+    "params": "short = 10\nlong = 21\nsignal = 9\n\n[thresholds]\ndown = -0.025\nup = 0.025\npersistence = 1",
+    "description": "Moving Average Convergence Divergence trend-following strategy.",
+    "category": "trend"
+  }
   // etc.
 ]
 ```

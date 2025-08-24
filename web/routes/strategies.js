@@ -1,5 +1,6 @@
 const _ = require('lodash');
 const fs = require('co-fs');
+const meta = require('../../strategies/metadata');
 
 const gekkoRoot = __dirname + '/../../';
 
@@ -21,6 +22,15 @@ module.exports = function *() {
       strat.params = yield fs.readFile(stratConfigPath + '/' + strat.name + '.toml', 'utf8')
     else
       strat.params = '';
+
+    const info = meta[strat.name];
+    if(info) {
+      strat.description = info.description;
+      strat.category = info.category;
+    } else {
+      strat.description = '';
+      strat.category = '';
+    }
   }
 
   this.body = strats;
