@@ -4,10 +4,50 @@ var log = require('../core/log');
 
 // configuration
 var config = require('../core/util').getConfig();
+
+// Add safety checks for configuration
+if (!config.varPPO) {
+  config.varPPO = {
+    momentum: 'TSI',
+    thresholds: {
+      weightLow: 120,
+      weightHigh: -120,
+      persistence: 0
+    }
+  };
+}
+
+if (!config.PPO) {
+  config.PPO = {
+    short: 12,
+    long: 26,
+    signal: 9,
+    thresholds: {
+      down: -0.025,
+      up: 0.025,
+      persistence: 2
+    }
+  };
+}
+
 var settings = config.varPPO;
 var momentum = settings.momentum;
 var momentumName = momentum.toLowerCase();
 var momentumSettings = config[momentum];
+
+// Add safety check for momentum settings
+if (!momentumSettings) {
+  momentumSettings = {
+    short: 13,
+    long: 25,
+    thresholds: {
+      low: -25,
+      high: 25,
+      persistence: 1
+    }
+  };
+  config[momentum] = momentumSettings;
+}
 
 // let's create our own method
 var method = {};
@@ -55,6 +95,14 @@ method.check = function() {
   var hist = ppo.PPOhist;
 
   var value = this.indicators[momentumName][momentumName];
+
+  // Add safety checks for thresholds
+  if (!momentumSettings.thresholds) {
+    momentumSettings.thresholds = { low: -25, high: 25 };
+  }
+  if (!settings.thresholds) {
+    settings.thresholds = { weightLow: 120, weightHigh: -120, persistence: 0 };
+  }
 
   var thresholds = {
     low: momentumSettings.thresholds.low + hist * settings.thresholds.weightLow,

@@ -6,6 +6,13 @@ var Indicator = function(config) {
   this.input = 'price';
   this.macd = 0;
   this.ppo = 0;
+  
+  // Add safety checks for config parameters with defaults
+  if (!config) config = {};
+  if (!config.short) config.short = 12;
+  if (!config.long) config.long = 26;
+  if (!config.signal) config.signal = 9;
+  
   this.short = new EMA(config.short);
   this.long = new EMA(config.long);
   this.MACDsignal = new EMA(config.signal);

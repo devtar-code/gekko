@@ -5,6 +5,12 @@ var Indicator = function(settings) {
   this.input = 'candle';
   this.lastClose = null;
   this.tsi = 0;
+  
+  // Add safety checks for settings parameters with defaults
+  if (!settings) settings = {};
+  if (!settings.short) settings.short = 13;
+  if (!settings.long) settings.long = 25;
+  
   this.inner = new EMA(settings.long);
   this.outer = new EMA(settings.short);
   this.absoluteInner = new EMA(settings.long);

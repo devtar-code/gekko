@@ -2,6 +2,10 @@
 
 var Indicator = function(weight) {
   this.input = 'price';
+  
+  // Add safety check for weight parameter with default
+  if (!weight || weight <= 0) weight = 10;
+  
   this.weight = weight;
   this.result = false;
   this.age = 0;
