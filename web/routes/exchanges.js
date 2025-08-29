@@ -14,7 +14,7 @@ util.setConfig(config);
 module.exports = function *() {
   const exchangesDir = yield fs.readdir(gekkoRoot + 'exchange/wrappers/');
   const exchanges = exchangesDir
-    .filter(f => _.last(f, 3).join('') === '.js')
+    .filter(f => f.slice(-3) === '.js')
     .map(f => f.slice(0, -3));
 
   let allCapabilities = [];
