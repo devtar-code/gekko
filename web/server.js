@@ -2,7 +2,7 @@ const config = require('./vue/dist/UIconfig');
 
 const koa = require('koa');
 const serve = require('koa-static');
-const cors = require('koa-cors');
+// const cors = require('koa-cors');
 const _ = require('lodash');
 const bodyParser = require('koa-bodyparser');
 
@@ -107,10 +107,8 @@ router.post('/api/getCandles', require(ROUTE('getCandles')));
 // });
 
 app
-  .use(cors())
   .use(serve(WEBROOT + 'vue/dist'))
   .use(bodyParser())
-  .use(require('koa-logger')())
   .use(router.routes())
   .use(router.allowedMethods());
 
