@@ -6,9 +6,6 @@ const cors = require('koa-cors');
 const _ = require('lodash');
 const bodyParser = require('koa-bodyparser');
 
-// Security middleware
-const security = require('./security');
-
 const opn = require('opn');
 const server = require('http').createServer();
 const router = require('koa-router')();
@@ -110,6 +107,7 @@ router.post('/api/getCandles', require(ROUTE('getCandles')));
 // });
 
 app
+  .use(cors())
   .use(serve(WEBROOT + 'vue/dist'))
   .use(bodyParser())
   .use(require('koa-logger')())
