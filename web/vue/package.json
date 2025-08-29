@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
-    "@vue/cli-service": "^5.0.8",
+    "@vue/cli-service": "^5.0.9",
     "@vue/cli-plugin-eslint": "^5.0.8",
     "@vue/compiler-sfc": "^3.4.15",
     "babel-plugin-transform-commonjs-es2015-modules": "^4.0.1",
