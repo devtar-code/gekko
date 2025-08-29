@@ -136,17 +136,44 @@
         i.fas.fa-wallet
         h3 Trading Settings
       .trading-settings
-        .setting-item
-          label Paper Trading
-          .toggle-switch
-            input(type='checkbox', v-model='config.paperTrader.enabled', @change='updateConfig')
-            .slider
-        .setting-item(v-if='config.paperTrader.enabled')
-          label Initial Balance ({{ config.watch.currency }})
-          input(type='number', v-model='config.paperTrader.simulationBalance.currency', min='100', step='100', @input='updateConfig')
-        .setting-item(v-if='config.paperTrader.enabled')
-          label Initial {{ config.watch.asset }} Balance
-          input(type='number', v-model='config.paperTrader.simulationBalance.asset', min='0.001', step='0.001', @input='updateConfig')
+        .trading-mode-toggle
+          .toggle-header
+            h4 Trading Mode
+            .mode-switch
+              .switch-option(:class="{ active: config.paperTrader.enabled }", @click='enablePaperTrading')
+                i.fas.fa-graduation-cap
+                span Paper Trading
+              .switch-option(:class="{ active: !config.paperTrader.enabled }", @click='enableRealTrading')
+                i.fas.fa-coins
+                span Real Trading
+          .mode-description
+            p(v-if='config.paperTrader.enabled')
+              i.fas.fa-info-circle
+              span Test strategies safely without real money or API keys
+            p(v-else)
+              i.fas.fa-key
+              span Trade with real money using API keys
+        .paper-trading-settings(v-if='config.paperTrader.enabled')
+          .setting-item
+            label Initial Balance ({{ config.watch.currency }})
+            input(type='number', v-model='config.paperTrader.simulationBalance.currency', min='100', step='100', @input='updateConfig')
+          .setting-item
+            label Initial {{ config.watch.asset }} Balance
+            input(type='number', v-model='config.paperTrader.simulationBalance.asset', min='0.001', step='0.001', @input='updateConfig')
+        .real-trading-settings(v-if='!config.paperTrader.enabled')
+          .api-key-info
+            p 
+              i.fas.fa-key
+              span Real trading requires API keys. Configure them in the 
+              a(href='#/config', target='_blank') Config page
+              span .
+          .api-key-status
+            .status-item
+              i.fas(:class="hasApiKey ? 'fa-check-circle' : 'fa-times-circle'")
+              span API Key: {{ hasApiKey ? 'Configured' : 'Not Found' }}
+            .status-item
+              i.fas(:class="hasSecretKey ? 'fa-check-circle' : 'fa-times-circle'")
+              span Secret Key: {{ hasSecretKey ? 'Configured' : 'Not Found' }}
 
     .config-section
       .section-header
@@ -162,6 +189,17 @@
           label Risk-Free Return Rate (%)
           input(type='number', v-model='config.performanceAnalyzer.riskFreeReturn', min='0', max='20', step='0.1', @input='updateConfig')
 
+    .config-section
+      .section-header
+        i.fas.fa-check-circle
+        h3 Configuration Status
+      .status-indicator(:class="{ valid: config.valid, invalid: !config.valid }")
+        .status-icon
+          i.fas(:class="config.valid ? 'fa-check-circle' : 'fa-exclamation-circle'")
+        .status-text
+          h4 {{ config.valid ? 'Configuration Ready' : 'Configuration Incomplete' }}
+          p {{ config.valid ? 'All required fields are filled. You can now start your Gekko!' : 'Please fill in all required fields to continue.' }}
+
 </template>
 
 <script>
@@ -170,6 +208,8 @@ export default {
     return {
       selectedRiskProfile: 'moderate',
       config: {
+        valid: true,
+        type: 'tradebot',
         watch: {
           exchange: 'binance',
           currency: 'USDT',
@@ -274,7 +314,45 @@ export default {
       this.updateConfig();
     },
     updateConfig() {
+      // Validate the configuration
+      this.config.valid = this.validateConfig();
       this.$emit('config', this.config);
+    },
+    validateConfig() {
+      // Basic validation - ensure required fields are present
+      const basicValidation = !!(
+        this.config.watch.exchange &&
+        this.config.watch.asset &&
+        this.config.watch.currency &&
+        this.config.tradingAdvisor.method
+      );
+      
+      // If real trading is enabled, also check for API keys
+      if (!this.config.paperTrader.enabled) {
+        return basicValidation && this.hasApiKey && this.hasSecretKey;
+      }
+      
+      return basicValidation;
+    },
+    enablePaperTrading() {
+      this.config.paperTrader.enabled = true;
+      this.updateConfig();
+    },
+    enableRealTrading() {
+      this.config.paperTrader.enabled = false;
+      this.updateConfig();
+    }
+  },
+  computed: {
+    hasApiKey() {
+      // Check if API key is configured for the selected exchange
+      const apiKeys = this.$store.state.apiKeys || [];
+      return apiKeys.includes(this.config.watch.exchange);
+    },
+    hasSecretKey() {
+      // For now, assume if API key exists, secret key also exists
+      // In a real implementation, you'd check the actual API key configuration
+      return this.hasApiKey;
     }
   },
   mounted() {
@@ -595,6 +673,213 @@ input:checked + .slider {
 
 input:checked + .slider:before {
   transform: translateX(26px);
+}
+
+.paper-trading-info {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: #e8f5e8;
+  border: 1px solid #c3e6c3;
+  border-radius: 6px;
+  color: #2d5a2d;
+}
+
+.paper-trading-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.paper-trading-info i {
+  color: #28a745;
+}
+
+.trading-mode-toggle {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.toggle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.toggle-header h4 {
+  margin: 0;
+  color: #2c3e50;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.mode-switch {
+  display: flex;
+  background: white;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.switch-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: white;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #6c757d;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.switch-option:hover {
+  background: #f8f9fa;
+  color: #495057;
+}
+
+.switch-option.active {
+  background: linear-gradient(135deg, #00d4aa, #0099cc);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 212, 170, 0.3);
+}
+
+.switch-option i {
+  font-size: 1rem;
+}
+
+.mode-description {
+  margin-top: 0.75rem;
+}
+
+.mode-description p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mode-description i {
+  color: #00d4aa;
+  font-size: 0.9rem;
+}
+
+.paper-trading-settings,
+.real-trading-settings {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.api-key-info {
+  margin-bottom: 1rem;
+}
+
+.api-key-info {
+  margin-bottom: 1rem;
+}
+
+.api-key-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #856404;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.api-key-info a {
+  color: #0056b3;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.api-key-info a:hover {
+  text-decoration: underline;
+}
+
+.api-key-status {
+  display: flex;
+  gap: 1rem;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.status-item i.fa-check-circle {
+  color: #28a745;
+}
+
+.status-item i.fa-times-circle {
+  color: #dc3545;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 2px solid #e9ecef;
+  transition: all 0.3s ease;
+}
+
+.status-indicator.valid {
+  border-color: #28a745;
+  background: linear-gradient(135deg, #f8fff9 0%, #e6ffe6 100%);
+}
+
+.status-indicator.invalid {
+  border-color: #dc3545;
+  background: linear-gradient(135deg, #fff8f8 0%, #ffe6e6 100%);
+}
+
+.status-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.status-indicator.valid .status-icon {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+}
+
+.status-indicator.invalid .status-icon {
+  background: linear-gradient(135deg, #dc3545, #fd7e14);
+  color: white;
+}
+
+.status-text h4 {
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.status-text p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 768px) {

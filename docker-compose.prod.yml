@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  gekko:
+    build: 
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: gekko-trading-bot
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - USE_SSL=false
+      - API_KEY=${API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./volumes/gekko/history:/usr/src/app/history
+      - ./volumes/gekko/logs:/usr/src/app/logs
+      - ./config.js:/usr/src/app/config.js:ro
+      - ./SECRET-api-keys.json:/usr/src/app/SECRET-api-keys.json:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - redis
+      - postgresql
+    networks:
+      - gekko-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
+
+  redis:
+    image: redis:7-alpine
+    container_name: gekko-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - ./volumes/redis:/data
+    networks:
+      - gekko-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+
+  postgresql:
+    image: postgres:15-alpine
+    container_name: gekko-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gekko
+      POSTGRES_USER: ${POSTGRES_USER:-gekko}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - ./volumes/postgresql:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - gekko-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gekko} -d gekko"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+
+  nginx:
+    image: nginx:alpine
+    container_name: gekko-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./volumes/nginx/logs:/var/log/nginx
+    depends_on:
+      - gekko
+    networks:
+      - gekko-network
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  monitoring:
+    image: prom/prometheus:latest
+    container_name: gekko-monitoring
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./volumes/prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - gekko-network
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  gekko-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+  postgresql-data:
+  gekko-logs:
+  prometheus-data:

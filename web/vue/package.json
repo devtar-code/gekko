@@ -4,25 +4,36 @@
   "private": true,
   "scripts": {
     "serve": "cross-env NODE_OPTIONS=--openssl-legacy-provider vue-cli-service serve",
-    "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider vue-cli-service build"
+    "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider vue-cli-service build",
+    "build:prod": "cross-env NODE_ENV=production vue-cli-service build",
+    "lint": "vue-cli-service lint",
+    "lint:fix": "vue-cli-service lint --fix",
+    "security-check": "npm audit --audit-level=high"
   },
   "dependencies": {
-    "marked": "^0.4.0",
-    "superagent": "^3.8.3",
+    "marked": "^9.1.6",
+    "superagent": "^8.1.2",
     "superagent-no-cache": "^0.1.1",
-    "vue": "^2.5.16",
-    "vue-router": "^3.0.1",
-    "vuex": "^3.0.1"
+    "vue": "^3.4.15",
+    "vue-router": "^4.2.5",
+    "vuex": "^4.1.0",
+    "axios": "^1.6.2",
+    "dayjs": "^1.11.10"
   },
   "devDependencies": {
-    "@vue/cli-plugin-babel": "^3.0.0-beta.15",
-    "@vue/cli-service": "^3.0.0-beta.15",
+    "@vue/cli-plugin-babel": "^5.0.8",
+    "@vue/cli-service": "^5.0.8",
+    "@vue/cli-plugin-eslint": "^5.0.8",
+    "@vue/compiler-sfc": "^3.4.15",
     "babel-plugin-transform-commonjs-es2015-modules": "^4.0.1",
-    "copy-webpack-plugin": "^4.5.2",
-    "cross-env": "^10.0.0",
-    "pug": "^2.0.3",
-    "pug-plain-loader": "^1.0.0",
-    "vue-template-compiler": "^2.5.16"
+    "copy-webpack-plugin": "^11.0.0",
+    "cross-env": "^7.0.3",
+    "pug": "^3.0.2",
+    "pug-plain-loader": "^1.1.0",
+    "vue-template-compiler": "^2.7.16",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.19.2",
+    "@vue/eslint-config-standard": "^8.0.1"
   },
   "postcss": {
     "plugins": {

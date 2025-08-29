@@ -1,0 +1,69 @@
+# Multi-stage build for production
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Install dependencies for building
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
+COPY web/vue/package*.json ./web/vue/
+
+# Install dependencies
+RUN npm ci --only=production --ignore-scripts
+RUN cd web/vue && npm ci --only=production --ignore-scripts
+
+# Copy source code
+COPY . .
+
+# Build Vue application
+RUN cd web/vue && npm run build:prod
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S gekko -u 1001
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Install production dependencies only
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/web/vue/node_modules ./web/vue/node_modules
+COPY --from=builder /usr/src/app/web/vue/dist ./web/vue/dist
+
+# Copy application code
+COPY --from=builder /usr/src/app/core ./core
+COPY --from=builder /usr/src/app/plugins ./plugins
+COPY --from=builder /usr/src/app/strategies ./strategies
+COPY --from=builder /usr/src/app/web ./web
+COPY --from=builder /usr/src/app/exchange ./exchange
+COPY --from=builder /usr/src/app/importers ./importers
+COPY --from=builder /usr/src/app/config ./config
+COPY --from=builder /usr/src/app/gekko.js ./
+COPY --from=builder /usr/src/app/package.json ./
+
+# Create necessary directories
+RUN mkdir -p history logs volumes/gekko/history volumes/gekko/logs
+
+# Set proper permissions
+RUN chown -R gekko:nodejs /usr/src/app
+RUN chmod -R 755 /usr/src/app
+RUN chmod 600 /usr/src/app/SECRET-api-keys.json
+
+# Switch to non-root user
+USER gekko
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/info', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+
+# Start application
+CMD ["npm", "start:secure"]

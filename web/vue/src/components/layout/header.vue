@@ -7,7 +7,7 @@
           .logo
             i.fas.fa-chart-line
             span.logo-text Gekko Pro
-          .version-badge v0.6.8
+          .version-badge v{{ version.gekko }}
         .nav-section
           .nav-item(:class="{ active: $route.path === '/home' }")
             router-link(to='/home')
@@ -41,7 +41,17 @@
 </template>
 
 <script>
-export default {}
+const gekkoPackage = require('../../../../../package.json');
+
+export default {
+  data: () => {
+    return {
+      version: {
+        gekko: gekkoPackage.version
+      }
+    }
+  }
+}
 </script>
 
 <style>
