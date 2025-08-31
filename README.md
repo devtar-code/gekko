@@ -90,46 +90,98 @@
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
-- Node.js 18+ 
-- Docker (optional)
-- Git
+- **Node.js** 18+ (LTS recommended)
+- **Git** for cloning the repository
 
 ### **Installation**
 
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/devtar-code/gekko.git
+   cd gekko
+   ```
+
+2. **Install main dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Install exchange dependencies:**
+   ```bash
+   cd exchange
+   npm install
+   cd ..
+   ```
+
+4. **Install Vue UI dependencies:**
+   ```bash
+   cd web/vue
+   npm install
+   cd ../..
+   ```
+
+### **Running Gekko Pro**
+
+#### **Option 1: Start with Web Server (Recommended)**
 ```bash
-# Clone the repository
-git clone https://github.com/devtar-code/gekko.git
-cd gekko
+cd web/vue
+npm run serve
+```
+This starts the web server at `http://localhost:8080`
 
-# Install dependencies
-npm install
-
-# Start the application
+#### **Option 2: Start with Main Application**
+```bash
 npm start
+```
+This starts the main Gekko application with UI at `http://localhost:3000`
+
+#### **Option 3: Command Line Mode**
+```bash
+node gekko.js --config sample-config.js
+```
+
+#### **Option 4: With Custom Config**
+```bash
+node gekko.js --config config.js --ui
 ```
 
 ### **Access the Application**
-Open your browser and navigate to: **http://localhost:3000**
+- **Web Server (Vue UI)**: http://localhost:8080
+- **Main Application**: http://localhost:3000
 
 ## 🔧 **Configuration**
 
 ### **Basic Configuration**
-```javascript
-// config.js
-var config = {
-  watch: {
-    exchange: 'binance',
-    currency: 'USDT',
-    asset: 'BTC'
-  },
-  tradingAdvisor: {
-    enabled: true,
-    method: 'MACD',
-    candleSize: 60,
-    historySize: 10
-  }
-};
-```
+
+1. **Copy the sample configuration:**
+   ```bash
+   cp sample-config.js config.js
+   ```
+
+2. **Edit the configuration file:**
+   ```javascript
+   // config.js
+   var config = {
+     watch: {
+       exchange: 'binance',
+       currency: 'USDT',
+       asset: 'BTC'
+     },
+     tradingAdvisor: {
+       enabled: true,
+       method: 'MACD',
+       candleSize: 60,
+       historySize: 10
+     },
+     paperTrader: {
+       enabled: true,
+       simulationBalance: {
+         asset: 1,
+         currency: 100
+       }
+     }
+   };
+   ```
 
 ### **Security Configuration**
 ```javascript
