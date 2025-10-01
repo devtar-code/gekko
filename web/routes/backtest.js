@@ -16,16 +16,16 @@ const pipelineRunner = promisify(require('../../core/workers/pipeline/parent'));
 //     roundtrips: true
 //   }
 // }
-module.exports = function *() {
+module.exports = async function(ctx) {
   var mode = 'backtest';
 
   var config = {};
 
   var base = require('./baseConfig');
 
-  var req = this.request.body;
+  var req = ctx.request.body;
 
   _.merge(config, base, req);
 
-  this.body = yield pipelineRunner(mode, config);
+  ctx.body = await pipelineRunner(mode, config);
 }

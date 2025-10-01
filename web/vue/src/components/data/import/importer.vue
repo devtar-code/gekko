@@ -18,6 +18,7 @@
 
 <script>
 
+import moment from 'moment'
 import { post } from '../../../tools/ajax'
 import spinner from '../../global/blockSpinner.vue'
 import importConfigBuilder from './importConfigBuilder.vue'

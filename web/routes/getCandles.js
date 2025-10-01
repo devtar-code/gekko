@@ -32,9 +32,9 @@ const promisify = require('tiny-promisify');
 const candleLoader = promisify(require('../../core/workers/loadCandles/parent'));
 const base = require('./baseConfig');
 
-module.exports = function *() {
+module.exports = async function(ctx) {
 
   config = {};
-  _.merge(config, base, this.request.body);
-  this.body = yield candleLoader(config);
+  _.merge(config, base, ctx.request.body);
+  ctx.body = await candleLoader(config);
 }
