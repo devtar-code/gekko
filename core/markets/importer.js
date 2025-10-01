@@ -45,7 +45,14 @@ var Market = function() {
   _.bindAll(this);
   this.exchangeSettings = exchangeChecker.settings(config.watch);
 
-  this.tradeBatcher = new TradeBatcher(this.exchangeSettings.tid);
+  // Ensure tid is a valid string, default to 'tid' if not provided
+  var tid = this.exchangeSettings.tid;
+  if (!tid || !_.isString(tid)) {
+    log.warn('Exchange settings missing valid tid, defaulting to "tid"');
+    tid = 'tid';
+  }
+
+  this.tradeBatcher = new TradeBatcher(tid);
   this.candleManager = new CandleManager;
   this.fetcher = fetcher({
     to: to,
@@ -97,6 +104,11 @@ Market.prototype.get = function() {
 }
 
 Market.prototype.processTrades = function(trades) {
+  if (!this.tradeBatcher) {
+    log.error('TradeBatcher not initialized, cannot process trades');
+    return;
+  }
+
   this.tradeBatcher.write(trades);
 
   if(this.done) {
