@@ -75,6 +75,9 @@
   "engines": {
     "node": ">=18"
   },
+  "overrides": {
+    "bluebird": "^3.7.2"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
