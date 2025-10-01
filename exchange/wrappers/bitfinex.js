@@ -1,5 +1,13 @@
 
-const Bitfinex = require("bitfinex-api-node");
+let Bitfinex;
+try {
+  Bitfinex = require("bitfinex-api-node");
+} catch(e) {
+  console.error('Bitfinex exchange not available: bitfinex-api-node is not installed.');
+  console.error('To use Bitfinex, install it with: npm install bitfinex-api-node@^1.2.1');
+  throw new Error('Bitfinex exchange requires optional dependency bitfinex-api-node');
+}
+
 const _ = require('lodash');
 const moment = require('moment');
 
