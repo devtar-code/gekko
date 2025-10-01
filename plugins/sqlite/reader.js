@@ -9,6 +9,11 @@ var sqliteUtil = require('./util');
 var Reader = function() {
   _.bindAll(this);
   this.db = sqlite.initDB(true);
+  
+  if (!this.db) {
+    log.error('Failed to initialize SQLite database connection');
+    throw new Error('Database initialization failed');
+  }
 }
 
 
@@ -144,6 +149,12 @@ Reader.prototype.countTotal = function(next) {
 Reader.prototype.getBoundry = function(next) {
 
   var self = this;
+  
+  if (!self.db || !self.db.open) {
+    log.error('Database connection is not available in getBoundry');
+    return next(new Error('Database connection unavailable'));
+  }
+  
   self.db.all(`
     SELECT
     (

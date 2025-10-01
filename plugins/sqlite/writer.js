@@ -11,6 +11,13 @@ var Store = function(done, pluginMeta) {
   this.done = done;
 
   this.db = sqlite.initDB(false);
+  
+  if (!this.db) {
+    log.error('Failed to initialize SQLite database connection for writing');
+    if (done) done(new Error('Database initialization failed'));
+    return;
+  }
+  
   this.db.serialize(() => this.upsertTables());
 
   this.cache = [];

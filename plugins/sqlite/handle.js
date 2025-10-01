@@ -44,15 +44,44 @@ if (mode === 'realtime' || mode === 'importer') {
     );
 }
 
+// Cache database connections
+var dbConnections = {};
+
 module.exports = {
-  initDB: () => {
+  initDB: (readOnly) => {
+    var key = fullPath + (readOnly ? '_ro' : '_rw');
+    
+    // Return cached connection if exists
+    if (dbConnections[key] && dbConnections[key].open) {
+      return dbConnections[key];
+    }
+    
     var journalMode = config.sqlite.journalMode || 'PERSIST';
     var syncMode = journalMode === 'WAL' ? 'NORMAL' : 'FULL';
   
-    var db = new sqlite3.Database(fullPath);
-    db.run('PRAGMA synchronous = ' + syncMode);
-    db.run('PRAGMA journal_mode = ' + journalMode);
-    db.configure('busyTimeout', 10000);
-    return db;
+    var dbMode = readOnly ? sqlite3.OPEN_READONLY : (sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
+    
+    try {
+      var db = new sqlite3.Database(fullPath, dbMode);
+      db.run('PRAGMA synchronous = ' + syncMode);
+      db.run('PRAGMA journal_mode = ' + journalMode);
+      db.configure('busyTimeout', 10000);
+      
+      // Cache the connection
+      dbConnections[key] = db;
+      
+      return db;
+    } catch(err) {
+      console.error('Error initializing database:', err);
+      return null;
+    }
+  },
+  closeDB: () => {
+    Object.keys(dbConnections).forEach(key => {
+      if (dbConnections[key] && dbConnections[key].open) {
+        dbConnections[key].close();
+      }
+    });
+    dbConnections = {};
   }
 };
