@@ -11,13 +11,13 @@ const base = require('./baseConfig');
 
 // starts an import
 // requires a post body with a config object
-module.exports = function *() {
+module.exports = async function(ctx) {
   try {
-    const mode = this.request.body.mode;
+    const mode = ctx.request.body.mode;
 
     if (!mode) {
-      this.status = 400;
-      this.body = { error: 'Mode is required' };
+      ctx.status = 400;
+      ctx.body = { error: 'Mode is required' };
       return;
     }
 
@@ -27,15 +27,15 @@ module.exports = function *() {
     _.merge(config, base);
     
     // Then merge request body, but ensure tradingAdvisor is properly handled
-    _.merge(config, this.request.body);
+    _.merge(config, ctx.request.body);
     
          // Ensure tradingAdvisor is properly configured if enabled
-     if (this.request.body.tradingAdvisor && this.request.body.tradingAdvisor.enabled) {
-       config.tradingAdvisor = {
-         enabled: true,
-         method: this.request.body.tradingAdvisor.method || 'MACD',
-         candleSize: parseInt(this.request.body.tradingAdvisor.candleSize || 1, 10),
-         historySize: parseInt(this.request.body.tradingAdvisor.historySize || 10, 10)
+     if (ctx.request.body.tradingAdvisor && ctx.request.body.tradingAdvisor.enabled) {
+      config.tradingAdvisor = {
+        enabled: true,
+        method: ctx.request.body.tradingAdvisor.method || 'MACD',
+        candleSize: parseInt(ctx.request.body.tradingAdvisor.candleSize || 1, 10),
+        historySize: parseInt(ctx.request.body.tradingAdvisor.historySize || 10, 10)
        };
        
                // For strategy runners, we need to ensure there's a market watcher first
@@ -80,8 +80,8 @@ module.exports = function *() {
     try {
       // Validate required fields
       if (!config.watch || !config.watch.exchange || !config.watch.asset || !config.watch.currency) {
-        this.status = 400;
-        this.body = { error: 'Invalid watch configuration. Exchange, asset, and currency are required.' };
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid watch configuration. Exchange, asset, and currency are required.' };
         return;
       }
 
@@ -90,8 +90,8 @@ module.exports = function *() {
         if (config.tradingAdvisor.candleSize) {
           config.tradingAdvisor.candleSize = parseInt(config.tradingAdvisor.candleSize, 10);
           if (isNaN(config.tradingAdvisor.candleSize) || config.tradingAdvisor.candleSize <= 0) {
-            this.status = 400;
-            this.body = { error: 'Invalid candle size' };
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid candle size' };
             return;
           }
         }
@@ -119,14 +119,14 @@ module.exports = function *() {
       try {
         require(util.dirs().gekko + 'exchange/wrappers/' + exchangeName);
       } catch (err) {
-        this.status = 400;
-        this.body = { error: `Unsupported exchange: ${exchangeName}` };
+        ctx.status = 400;
+        ctx.body = { error: `Unsupported exchange: ${exchangeName}` };
         return;
       }
 
     } catch (err) {
-      this.status = 500;
-      this.body = { error: 'Internal validation error: ' + err.message };
+      ctx.status = 500;
+      ctx.body = { error: 'Internal validation error: ' + err.message };
       return;
     }
 
@@ -135,8 +135,8 @@ module.exports = function *() {
       const keys = apiKeyManager._getApiKeyPair(config.watch.exchange);
 
       if(!keys) {
-        this.status = 400;
-        this.body = { error: 'No API keys found for this exchange. Please configure API keys or enable paper trading.' };
+        ctx.status = 400;
+        ctx.body = { error: 'No API keys found for this exchange. Please configure API keys or enable paper trading.' };
         return;
       }
 
@@ -151,7 +151,7 @@ module.exports = function *() {
     console.log(`Starting new Gekko with mode: ${mode}, exchange: ${config.watch.exchange}, pair: ${config.watch.asset}/${config.watch.currency}`);
 
     // If this is a strategy runner, ensure there's a market watcher first
-    if (this.request.body.tradingAdvisor && this.request.body.tradingAdvisor.enabled) {
+    if (ctx.request.body.tradingAdvisor && ctx.request.body.tradingAdvisor.enabled) {
       // Check if there's already a market watcher for this exchange/pair
       const existingGekkos = gekkoManager.gekkos;
       const hasWatcher = Object.values(existingGekkos).some(gekko => 
@@ -187,17 +187,17 @@ module.exports = function *() {
     const state = gekkoManager.add({config, mode});
 
     if (!state || !state.id) {
-      this.status = 500;
-      this.body = { error: 'Failed to create Gekko instance' };
+      ctx.status = 500;
+      ctx.body = { error: 'Failed to create Gekko instance' };
       return;
     }
 
-    this.status = 200;
-    this.body = state;
+    ctx.status = 200;
+    ctx.body = state;
     
   } catch (error) {
     console.error('Error in startGekko:', error);
-    this.status = 500;
-    this.body = { error: 'Internal server error: ' + error.message };
+    ctx.status = 500;
+    ctx.body = { error: 'Internal server error: ' + error.message };
   }
 }
