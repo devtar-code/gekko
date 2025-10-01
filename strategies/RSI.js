@@ -28,7 +28,7 @@ method.init = function() {
   this.requiredHistory = this.tradingAdvisor.historySize;
 
   // define the indicators we need
-  this.addIndicator('rsi', 'RSI', this.settings);
+  this.addIndicator('rsi', 'RSI', this.settings || {});
 }
 
 // for debugging purposes log the last

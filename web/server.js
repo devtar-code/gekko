@@ -2,7 +2,7 @@ const config = require('./vue/dist/UIconfig');
 
 const koa = require('koa');
 const serve = require('koa-static');
-// const cors = require('koa-cors');
+const cors = require('koa-cors');
 const _ = require('lodash');
 const bodyParser = require('koa-bodyparser');
 
@@ -107,8 +107,17 @@ router.post('/api/getCandles', require(ROUTE('getCandles')));
 // });
 
 app
+  .use(cors({
+    origin: '*',
+    credentials: true
+  }))
   .use(serve(WEBROOT + 'vue/dist'))
-  .use(bodyParser())
+  .use(bodyParser({
+    enableTypes: ['json', 'form', 'text'],
+    jsonLimit: '10mb',
+    formLimit: '10mb',
+    textLimit: '10mb'
+  }))
   .use(router.routes())
   .use(router.allowedMethods());
 

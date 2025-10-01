@@ -1,12 +1,12 @@
-const marked = require('marked');
+import { marked, Renderer } from 'marked';
 
 // add `target='_blank'` to outgoing links
 
 // https://github.com/chjj/marked/pull/451#issuecomment-49976076
 
-var myRenderer = new marked.Renderer();
+const myRenderer = new Renderer();
 myRenderer.link = function(href, title, text) {
-  var external, newWindow, out;
+  let external, newWindow, out;
   external = /^https?:\/\/.+$/.test(href);
   newWindow = external || title === 'newWindow';
   out = "<a href=\"" + href + "\"";
@@ -19,6 +19,6 @@ myRenderer.link = function(href, title, text) {
   return out += ">" + text + "</a>";
 };
 
-marked.setOptions({renderer: myRenderer});
+marked.setOptions({ renderer: myRenderer });
 
 export default marked;

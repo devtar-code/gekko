@@ -178,7 +178,7 @@ CandleCreator.prototype.addEmptyCandles = function(candles) {
     i = +start;
     j++;
 
-    if(_.contains(minutes, i))
+    if(_.includes(minutes, i))
       continue; // we have a candle for this minute
 
     var lastPrice = candles[j].close;

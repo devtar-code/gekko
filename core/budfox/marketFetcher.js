@@ -24,7 +24,8 @@ const Fetcher = function(config) {
 
   const exchangeName = config.watch.exchange.toLowerCase();
   const DataProvider = require(util.dirs().gekko + 'exchange/wrappers/' + exchangeName);
-  _.bindAll(this);
+  // Ensure all handler methods have the correct `this`
+  _.bindAll(this, '_fetch', 'fetch', 'processTrades', 'relayTrades', 'handleTimeout');
 
   // Create a public dataProvider object which can retrieve live
   // trade information from an exchange.
@@ -32,11 +33,16 @@ const Fetcher = function(config) {
 
   this.exchange = exchangeChecker.settings(config.watch);
 
-  var requiredHistory = config.tradingAdvisor.candleSize * config.tradingAdvisor.historySize;
+  // Set default candleSize if tradingAdvisor is not enabled
+  var candleSize = config.tradingAdvisor && config.tradingAdvisor.enabled ? 
+    config.tradingAdvisor.candleSize : 1;
+  var historySize = config.tradingAdvisor && config.tradingAdvisor.enabled ? 
+    config.tradingAdvisor.historySize : 10;
+  var requiredHistory = candleSize * historySize;
 
   // If the trading adviser is enabled we might need a very specific fetch since
   // to line up [local db, trading method, and fetching]
-  if(config.tradingAdvisor.enabled && config.tradingAdvisor.firstFetchSince) {
+  if(config.tradingAdvisor && config.tradingAdvisor.enabled && config.tradingAdvisor.firstFetchSince) {
     this.firstSince = config.tradingAdvisor.firstFetchSince;
 
     if(this.exchange.providesHistory === 'date') {
@@ -61,6 +67,8 @@ const Fetcher = function(config) {
   // scheduled fetch.
   this.tries = 0;
   this.limit = 20; // [TODO]
+  this.timeout = null;
+  this.isFetching = false;
 
   this.firstFetch = true;
 
@@ -70,10 +78,46 @@ const Fetcher = function(config) {
 util.makeEventEmitter(Fetcher);
 
 Fetcher.prototype._fetch = function(since) {
-  if(++this.tries >= this.limit)
+  if(++this.tries >= this.limit) {
+    log.error('Max retries reached for', this.pair, 'on', this.exchange.name);
     return;
+  }
 
-  this.exchangeTrader.getTrades(since, this.processTrades, false);
+  if(this.isFetching) {
+    log.debug('Already fetching, skipping request');
+    return;
+  }
+
+  this.isFetching = true;
+  
+  // Set a timeout to prevent hanging
+  this.timeout = setTimeout(() => {
+    this.isFetching = false;
+    log.warn('Fetch timeout for', this.pair, 'on', this.exchange.name);
+    this.handleTimeout();
+  }, 30000); // 30 second timeout
+
+  try {
+    this.exchangeTrader.getTrades(since, this.processTrades, false);
+  } catch(err) {
+    this.isFetching = false;
+    clearTimeout(this.timeout);
+    log.error('Error calling getTrades:', err.message);
+    this.handleTimeout();
+  }
+}
+
+Fetcher.prototype.handleTimeout = function() {
+  this.isFetching = false;
+  if(this.timeout) {
+    clearTimeout(this.timeout);
+    this.timeout = null;
+  }
+  
+  // Retry after a short delay
+  setTimeout(() => {
+    this._fetch(false);
+  }, 5000);
 }
 
 Fetcher.prototype.fetch = function() {
@@ -90,15 +134,27 @@ Fetcher.prototype.fetch = function() {
 }
 
 Fetcher.prototype.processTrades = function(err, trades) {
+  // Clear timeout and reset fetching state
+  this.isFetching = false;
+  if(this.timeout) {
+    clearTimeout(this.timeout);
+    this.timeout = null;
+  }
+
   if(err || _.isEmpty(trades)) {
     if(err) {
       log.warn(this.exchange.name, 'returned an error while fetching trades:', err);
       log.debug('refetching...');
     } else
       log.debug('Trade fetch came back empty, refetching...');
-    setTimeout(this._fetch, +moment.duration('s', 1));
+    
+    // Use exponential backoff for retries
+    const delay = Math.min(1000 * Math.pow(2, this.tries), 30000);
+    setTimeout(() => this._fetch(false), delay);
     return;
   }
+  
+  log.debug('Received', trades.length, 'trades from', this.exchange.name);
   this.batcher.write(trades);
 }
 

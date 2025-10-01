@@ -24,9 +24,9 @@ const configValidationSchema = Joi.object({
     enabled: Joi.boolean().default(true),
     reportInCurrency: Joi.boolean().default(true),
     simulationBalance: Joi.object({
-      asset: Joi.number().positive().required(),
-      currency: Joi.number().positive().required()
-    }).required(),
+      asset: Joi.number().positive().default(1),
+      currency: Joi.number().positive().default(1000)
+    }).optional().default({ asset: 1, currency: 1000 }),
     feeMaker: Joi.number().min(0).max(1).default(0.15),
     feeTaker: Joi.number().min(0).max(1).default(0.25),
     feeUsing: Joi.string().valid('maker', 'taker').default('maker'),

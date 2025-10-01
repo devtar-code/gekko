@@ -289,12 +289,18 @@ export default function(_data, _trades, _height) {
       .style('visibility', 'hidden')
       .style('background', colors.tooltip)
       .style('color', colors.text)
-      .style('padding', '8px 12px')
-      .style('border-radius', '4px')
+      .style('padding', '12px 16px')
+      .style('border-radius', '6px')
       .style('font-size', '12px')
-      .style('font-family', 'monospace')
+      .style('font-family', 'SF Mono, Monaco, Cascadia Code, Roboto Mono, Consolas, Courier New, monospace')
       .style('border', '1px solid ' + colors.border)
-      .style('box-shadow', '0 2px 8px rgba(0,0,0,0.3)');
+      .style('box-shadow', '0 4px 12px rgba(0,0,0,0.4)')
+      .style('backdrop-filter', 'blur(10px)')
+      .style('z-index', '1000')
+      .style('line-height', '1.4')
+      .style('pointer-events', 'none')
+      .style('transition', 'opacity 0.2s')
+      .style('opacity', '1');
   }
 
   // Helper to draw current price line/label
@@ -347,33 +353,39 @@ export default function(_data, _trades, _height) {
       mouse[1] >= margin.top && mouse[1] <= margin.top + height
     ) {
       crosshair.style('display', null);
-      tooltip.style('visibility', 'visible').classed('hidden', false);
+      tooltip.style('visibility', 'visible').style('opacity', '1');
+      
       var x0 = x.invert(mouse[0] - margin.left);
       var bisect = d3.bisector(d => d.date).left;
       var i = bisect(candlestickData, x0, 1);
-      var d0 = candlestickData[i - 1];
-      var d1 = candlestickData[i];
-      var d = x0 - d0.date > d1.date - x0 ? d1 : d0;
-      crosshair.select('.crosshair-x').attr('transform', 'translate(' + x(d.date) + ',0)');
-      crosshair.select('.crosshair-y').attr('transform', 'translate(0,' + y(d.price) + ')');
-      tooltip.html(`
-        <div><strong>${moment(d.date).format('MMM DD, YYYY HH:mm')}</strong></div>
-        <div>O: ${d.open.toFixed(2)}</div>
-        <div>H: ${d.high.toFixed(2)}</div>
-        <div>L: ${d.low.toFixed(2)}</div>
-        <div>C: ${d.close.toFixed(2)}</div>
-        <div>V: ${d.volume.toLocaleString()}</div>
-      `)
-        .style('left', (d3.event.pageX + 10) + 'px')
-        .style('top', (d3.event.pageY - 10) + 'px');
+      
+      if (i > 0 && i < candlestickData.length) {
+        var d0 = candlestickData[i - 1];
+        var d1 = candlestickData[i];
+        var d = x0 - d0.date > d1.date - x0 ? d1 : d0;
+        
+        crosshair.select('.crosshair-x').attr('transform', 'translate(' + x(d.date) + ',0)');
+        crosshair.select('.crosshair-y').attr('transform', 'translate(0,' + y(d.close) + ')');
+        
+        tooltip.html(`
+          <div><strong>${moment(d.date).format('MMM DD, YYYY HH:mm')}</strong></div>
+          <div>O: $${d.open.toFixed(2)}</div>
+          <div>H: $${d.high.toFixed(2)}</div>
+          <div>L: $${d.low.toFixed(2)}</div>
+          <div>C: $${d.close.toFixed(2)}</div>
+          <div>V: ${d.volume.toLocaleString()}</div>
+        `)
+          .style('left', (d3.event.pageX + 10) + 'px')
+          .style('top', (d3.event.pageY - 10) + 'px');
+      }
     } else {
       crosshair.style('display', 'none');
-      tooltip.style('visibility', 'hidden').classed('hidden', true);
+      tooltip.style('visibility', 'hidden').style('opacity', '0');
     }
   })
   .on('mouseleave', function() {
     crosshair.style('display', 'none');
-    tooltip.style('visibility', 'hidden').classed('hidden', true);
+    tooltip.style('visibility', 'hidden').style('opacity', '0');
   });
   // Remove .zoom mouse events (handled by SVG now)
   svg.select('.zoom').on('.zoom', null);

@@ -10,14 +10,24 @@ config.silent = false;
 config.debug = true;
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//                         WATCHING A MARKET
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// watch will be configured by the request
+config.watch = {
+  exchange: 'binance',
+  currency: 'USDT',
+  asset: 'BTC'
+};
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //                       CONFIGURING TRADING ADVICE
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-config.tradingAdvisor = {
-}
+// tradingAdvisor will be configured by the request
 
 config.candleWriter = {
-  enabled: false
+  enabled: true
 }
 
 config.backtestResultExporter = {

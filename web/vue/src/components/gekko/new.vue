@@ -29,7 +29,8 @@
 
 import _ from 'lodash'
 import Vue from 'vue'
-import { post } from '../../tools/ajax'
+import { post, get } from '../../tools/ajax'
+import { bus } from '../global/ws'
 import gekkoConfigBuilder from './gekkoConfigBuilder.vue'
 import spinner from '../global/blockSpinner.vue'
 
@@ -41,7 +42,11 @@ export default {
   data: () => {
     return {
       pendingStratrunner: false,
-      config: {}
+      config: {
+        valid: false // Initialize with invalid state
+      },
+      waitForMarketStart: false,
+      redirectFallbackTimer: null
     }
   },
   computed: {
@@ -65,22 +70,15 @@ export default {
     gekkoConfig: function() {
       var startAt;
 
-      if(!this.existingMarketWatcher)
-        return;
-
-      if(!this.requiredHistoricalData)
+      if(!this.requiredHistoricalData || !this.existingMarketWatcher) {
         startAt = moment().utc().startOf('minute').format();
-      else {
-        // TODO: figure out whether we can stitch data
-        // without looking at the existing watcher
+      } else {
         const optimal = moment().utc().startOf('minute')
           .subtract(this.requiredHistoricalData, 'minutes')
           .unix();
-
         const available = moment
           .utc(this.existingMarketWatcher.events.initial.candle.start)
           .unix();
-
         startAt = moment.unix(Math.max(optimal, available)).utc().format();
       }
 
@@ -116,44 +114,49 @@ export default {
       return this.$store.state.apiKeys;
     }
   },
-  watch: {
-    // start the stratrunner
-    existingMarketWatcher: function(val, prev) {
-      if(!this.pendingStratrunner)
-        return;
-
-      const gekko = this.existingMarketWatcher;
-
-      if(gekko.events.latest.candle) {
+  created() {
+    // If we need to wait for a new watcher, start strat runner once marketStart arrives
+    bus.$on('gekko_event', data => {
+      if(!this.waitForMarketStart) return;
+      if(!this.pendingStratrunner) return;
+      if(!data || !data.event || data.id !== this.pendingStratrunner) return;
+      if(data.event.type === 'marketStart') {
+        this.waitForMarketStart = false;
         this.pendingStratrunner = false;
-
-        this.startGekko((err, resp) => {
-          this.$router.push({
-            path: `/live-gekkos/${resp.id}`
-          });
-        });
+        this.startGekko(this.routeToGekko);
       }
-    }
+    });
   },
   methods: {
     updateConfig: function(config) {
       this.config = config;
     },
     start: function() {
+      console.log('=== START NEW GEKKO CLICKED ===');
+      console.log('Config:', JSON.stringify(this.config, null, 2));
+      console.log('Config type:', this.config.type);
+      console.log('Available API keys:', this.availableApiKeys);
 
       // if the user starts a tradebot we do some
       // checks first.
       if(this.config.type === 'tradebot') {
+        console.log('Starting tradebot...');
         if(this.existingTradebot) {
           let str = 'You already have a tradebot running on this exchange';
           str += ', you can only run one tradebot per exchange.';
+          console.error('Error:', str);
           return alert(str);
         }
 
         // Only check for API keys if paper trading is disabled
         if(!this.config.paperTrader || !this.config.paperTrader.enabled) {
-          if(!this.availableApiKeys.includes(this.exchange))
+          console.log('Real trading mode - checking API keys...');
+          if(!this.availableApiKeys.includes(this.exchange)) {
+            console.error('No API keys found for exchange:', this.exchange);
             return alert('Please first configure API keys for this exchange in the config page, or enable paper trading.')
+          }
+        } else {
+          console.log('Paper trading mode - no API keys needed');
         }
       }
 
@@ -174,6 +177,7 @@ export default {
           });
         } else {
           this.startWatcher((error, resp) => {
+            if(error || !resp) return console.error(error || 'no response');
             this.$router.push({
               path: `/live-gekkos/${resp.id}`
             });
@@ -181,36 +185,107 @@ export default {
         }
 
       } else {
-
-        if(this.existingMarketWatcher) {
-          // the specified market is already being watched,
-          // just start a gekko!
-          this.startGekko(this.routeToGekko);
-          
-        } else {
-          // the specified market is not yet being watched,
-          // we need to create a watcher
-          this.startWatcher((err, resp) => {
-            this.pendingStratrunner = resp.id;
-            // now we just wait for the watcher to be properly initialized
-            // (see the `watch.existingMarketWatcher` method)
-          });
-        }
+        // Always start the strategy runner immediately; backend will create
+        // a watcher automatically if needed.
+        this.pendingStratrunner = true;
+        // Setup a fallback redirect in case the API response parsing fails
+        // or WS is delayed. Poll the list and route to the freshest runner.
+        this.redirectFallbackTimer = setTimeout(() => {
+          this.findNewestRunnerAndRoute();
+        }, 4000);
+        this.startGekko(this.routeToGekko);
       }
     },
-    routeToGekko: function(err, resp) {
-      if(err || resp.error)
-        return console.error(err, resp.error);
+    findNewestRunnerAndRoute: function() {
+      // Always unlock the UI; allow user to click Start again even if nothing is found
+      if(this.redirectFallbackTimer) {
+        clearTimeout(this.redirectFallbackTimer);
+        this.redirectFallbackTimer = null;
+      }
+      this.pendingStratrunner = false;
+      this.waitForMarketStart = false;
 
-      this.$router.push({
-        path: `/live-gekkos/${resp.id}`
+      // Fetch /api/gekkos and route to the latest leech for selected market
+      const watch = this.config.watch || {};
+      const asset = watch.asset;
+      const currency = watch.currency;
+      const exchange = watch.exchange;
+      get('gekkos', (err, resp) => {
+        if(err || !resp || !resp.live) return;
+        const all = Object.values(resp.live);
+        const candidates = all.filter(g => g.type === 'leech' && g.config && g.config.watch &&
+          g.config.watch.asset === asset && g.config.watch.currency === currency && g.config.watch.exchange === exchange);
+        if(!candidates.length) return;
+        const latest = candidates.sort((a,b) => new Date(b.start) - new Date(a.start))[0];
+        if(latest && latest.id) {
+          this.$router.push({ path: `/live-gekkos/${latest.id}` });
+        }
       });
+    },
+    routeToGekko: function(err, resp) {
+      console.log('=== ROUTE TO GEKKO ===');
+      console.log('Error:', err);
+      console.log('Response:', resp);
+      
+      if(err || (resp && resp.error)) {
+        this.pendingStratrunner = false;
+        this.waitForMarketStart = false;
+        const errorMsg = (resp && resp.error) ? resp.error : (err ? err.message || err : 'Unknown error');
+        console.error('Error starting Gekko:', errorMsg);
+        alert('Error starting Gekko: ' + errorMsg);
+        return;
+      }
+
+      if(!resp || !resp.id) {
+        this.pendingStratrunner = false;
+        this.waitForMarketStart = false;
+        console.warn('No ID in response, trying fallback discovery...');
+        // fallback: try to discover the created runner and route
+        this.findNewestRunnerAndRoute();
+        return;
+      }
+
+      console.log('Gekko started successfully with ID:', resp.id);
+      this.pendingStratrunner = false;
+      this.waitForMarketStart = false;
+      if(this.redirectFallbackTimer) {
+        clearTimeout(this.redirectFallbackTimer);
+        this.redirectFallbackTimer = null;
+      }
+      this.$router.push({ path: `/live-gekkos/${resp.id}` });
     },
     startWatcher: function(next) {
       post('startGekko', this.watchConfig, next);
     },
     startGekko: function(next) {
-      post('startGekko', this.gekkoConfig, next);
+      console.log('=== STARTING GEKKO ===');
+      // Ensure we always send a fully shaped payload with correct types
+      const payload = JSON.parse(JSON.stringify(this.gekkoConfig || {}));
+      console.log('Initial payload:', payload);
+
+      // Force numbers for candleSize/historySize if present
+      if(payload && payload.tradingAdvisor) {
+        if(typeof payload.tradingAdvisor.candleSize === 'string')
+          payload.tradingAdvisor.candleSize = parseInt(payload.tradingAdvisor.candleSize, 10);
+        if(typeof payload.tradingAdvisor.historySize === 'string')
+          payload.tradingAdvisor.historySize = parseInt(payload.tradingAdvisor.historySize, 10);
+        if(!payload.tradingAdvisor.method)
+          payload.tradingAdvisor.method = 'MACD';
+      }
+
+      // Ensure paperTrader block exists when enabled toggle shown
+      if(!payload.paperTrader) {
+        payload.paperTrader = { enabled: true, simulationBalance: { asset: 1, currency: 1000 } };
+      }
+
+      console.log('Final payload being sent:', JSON.stringify(payload, null, 2));
+
+      post('startGekko', payload, (err, resp) => {
+        console.log('=== GEKKO START RESPONSE ===');
+        console.log('Error:', err);
+        console.log('Response:', resp);
+        if (next) next(err, resp);
+      });
     }
   }
 }

@@ -21,7 +21,7 @@
           input(type='text', v-model='config.watch.currency', placeholder='USDT', @input='updateConfig')
         .config-item
           label Candle Size (minutes)
-          select(v-model='config.tradingAdvisor.candleSize', @change='updateConfig')
+          select(v-model.number='config.tradingAdvisor.candleSize', @change='updateConfig')
             option(value='1') 1 minute
             option(value='5') 5 minutes
             option(value='15') 15 minutes
@@ -113,23 +113,46 @@
         .param-group(v-if='config.tradingAdvisor.method === "MACD"')
           .param-item
             label Short Period
-            input(type='number', v-model='config.MACD.short', min='1', max='50', @input='updateConfig')
+            input(type='number', v-model.number='config.MACD.short', min='1', max='50', @input='updateConfig')
           .param-item
             label Long Period
-            input(type='number', v-model='config.MACD.long', min='1', max='100', @input='updateConfig')
+            input(type='number', v-model.number='config.MACD.long', min='1', max='100', @input='updateConfig')
           .param-item
             label Signal Period
-            input(type='number', v-model='config.MACD.signal', min='1', max='50', @input='updateConfig')
+            input(type='number', v-model.number='config.MACD.signal', min='1', max='50', @input='updateConfig')
         .param-group(v-if='config.tradingAdvisor.method === "RSI"')
           .param-item
             label Period
-            input(type='number', v-model='config.RSI.interval', min='5', max='50', @input='updateConfig')
+            input(type='number', v-model.number='config.RSI.interval', min='5', max='50', @input='updateConfig')
           .param-item
             label Oversold Level
-            input(type='number', v-model='config.RSI.thresholds.low', min='10', max='40', @input='updateConfig')
+            input(type='number', v-model.number='config.RSI.thresholds.low', min='10', max='40', @input='updateConfig')
           .param-item
             label Overbought Level
-            input(type='number', v-model='config.RSI.thresholds.high', min='60', max='90', @input='updateConfig')
+            input(type='number', v-model.number='config.RSI.thresholds.high', min='60', max='90', @input='updateConfig')
+        .param-group(v-if='config.tradingAdvisor.method === "CCI"')
+          .param-item
+            label Constant
+            input(type='number', v-model.number='config.CCI.constant', min='0.001', max='0.1', step='0.001', @input='updateConfig')
+          .param-item
+            label History Size
+            input(type='number', v-model.number='config.CCI.history', min='20', max='200', @input='updateConfig')
+          .param-item
+            label Up Threshold
+            input(type='number', v-model.number='config.CCI.thresholds.up', min='50', max='200', @input='updateConfig')
+          .param-item
+            label Down Threshold
+            input(type='number', v-model.number='config.CCI.thresholds.down', min='-200', max='-50', @input='updateConfig')
+        .param-group(v-if='config.tradingAdvisor.method === "PPO"')
+          .param-item
+            label Short Period
+            input(type='number', v-model.number='config.PPO.short', min='1', max='50', @input='updateConfig')
+          .param-item
+            label Long Period
+            input(type='number', v-model.number='config.PPO.long', min='1', max='100', @input='updateConfig')
+          .param-item
+            label Signal Period
+            input(type='number', v-model.number='config.PPO.signal', min='1', max='50', @input='updateConfig')
 
     .config-section
       .section-header
@@ -156,10 +179,10 @@
         .paper-trading-settings(v-if='config.paperTrader.enabled')
           .setting-item
             label Initial Balance ({{ config.watch.currency }})
-            input(type='number', v-model='config.paperTrader.simulationBalance.currency', min='100', step='100', @input='updateConfig')
+            input(type='number', v-model.number='config.paperTrader.simulationBalance.currency', min='100', step='100', @input='updateConfig')
           .setting-item
             label Initial {{ config.watch.asset }} Balance
-            input(type='number', v-model='config.paperTrader.simulationBalance.asset', min='0.001', step='0.001', @input='updateConfig')
+            input(type='number', v-model.number='config.paperTrader.simulationBalance.asset', min='0.001', step='0.001', @input='updateConfig')
         .real-trading-settings(v-if='!config.paperTrader.enabled')
           .api-key-info
             p 
@@ -182,12 +205,13 @@
       .performance-settings
         .setting-item
           label Enable Performance Analyzer
-          .toggle-switch
+          // Use a label wrapper so clicking the slider toggles the checkbox
+          label.toggle-switch
             input(type='checkbox', v-model='config.performanceAnalyzer.enabled', @change='updateConfig')
             .slider
         .setting-item(v-if='config.performanceAnalyzer.enabled')
           label Risk-Free Return Rate (%)
-          input(type='number', v-model='config.performanceAnalyzer.riskFreeReturn', min='0', max='20', step='0.1', @input='updateConfig')
+          input(type='number', v-model.number='config.performanceAnalyzer.riskFreeReturn', min='0', max='20', step='0.1', @input='updateConfig')
 
     .config-section
       .section-header
@@ -220,6 +244,10 @@ export default {
           method: 'MACD',
           candleSize: 60,
           historySize: 10
+        },
+        riskManagement: {
+          maxPositionSize: 0.10,
+          stopLoss: 0.05
         },
         MACD: {
           short: 10,
@@ -271,7 +299,7 @@ export default {
           slippage: 0.05
         },
         performanceAnalyzer: {
-          enabled: true,
+          enabled: false,
           riskFreeReturn: 5
         }
       }
@@ -306,8 +334,16 @@ export default {
       };
       
       const settings = profiles[profile];
-      this.config.tradingAdvisor.candleSize = settings.candleSize;
-      this.config.tradingAdvisor.historySize = settings.historySize;
+      // Apply risk profile settings to config
+      this.config.tradingAdvisor.candleSize = Number(settings.candleSize);
+      this.config.tradingAdvisor.historySize = Number(settings.historySize);
+      
+      // Store risk profile settings for use in trading logic
+      if (!this.config.riskManagement) {
+        this.config.riskManagement = {};
+      }
+      this.config.riskManagement.maxPositionSize = settings.maxPositionSize;
+      this.config.riskManagement.stopLoss = settings.stopLoss;
     },
     selectStrategy(strategy) {
       this.config.tradingAdvisor.method = strategy;
@@ -332,6 +368,7 @@ export default {
         return basicValidation && this.hasApiKey && this.hasSecretKey;
       }
       
+      // For paper trading, only basic validation is needed
       return basicValidation;
     },
     enablePaperTrading() {
@@ -347,6 +384,10 @@ export default {
     hasApiKey() {
       // Check if API key is configured for the selected exchange
       const apiKeys = this.$store.state.apiKeys || [];
+      // If apiKeys is not an array or is empty, assume no API keys are configured
+      if (!Array.isArray(apiKeys) || apiKeys.length === 0) {
+        return false;
+      }
       return apiKeys.includes(this.config.watch.exchange);
     },
     hasSecretKey() {
@@ -782,10 +823,6 @@ input:checked + .slider:before {
   background: white;
   border-radius: 6px;
   border: 1px solid #e9ecef;
-}
-
-.api-key-info {
-  margin-bottom: 1rem;
 }
 
 .api-key-info {

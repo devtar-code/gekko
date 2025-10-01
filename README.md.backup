@@ -87,13 +87,13 @@
 - **Error Tracking**: Advanced error monitoring and alerting
 - **Performance Monitoring**: Real-time performance metrics
 
-## 🚀 **Quick Start (CORRECTED)**
+## 🚀 **Quick Start**
 
 ### **Prerequisites**
 - **Node.js** 18+ (LTS recommended)
 - **Git** for cloning the repository
 
-### **Installation (FIXED)**
+### **Installation**
 
 1. **Clone the repository:**
    ```bash
@@ -101,58 +101,53 @@
    cd gekko
    ```
 
-2. **Install ALL dependencies (FIXED):**
+2. **Install main dependencies:**
    ```bash
-   # Install main dependencies
    npm install
-   
-   # Install exchange dependencies
+   ```
+
+3. **Install exchange dependencies:**
+   ```bash
    cd exchange
    npm install
    cd ..
-   
-   # Install Vue UI dependencies
+   ```
+
+4. **Install Vue UI dependencies:**
+   ```bash
    cd web/vue
    npm install
    cd ../..
    ```
 
-3. **Build the Vue UI:**
-   ```bash
-   cd web/vue
-   npm run build
-   cd ../..
-   ```
+### **Running Gekko Pro**
 
-### **Running Gekko Pro (UNIFIED)**
-
-#### **Option 1: Unified Startup (RECOMMENDED)**
+#### **Option 1: Start with Web Server (Recommended)**
 ```bash
-# This starts everything on port 3000
-node launch-gekko.js
-```
-
-#### **Option 2: Manual Startup**
-```bash
-# Start the main application (includes UI)
-npm start
-```
-
-#### **Option 3: Development Mode**
-```bash
-# Start Vue development server (for development only)
 cd web/vue
 npm run serve
 ```
+This starts the web server at `http://localhost:8080`
 
-#### **Option 4: Command Line Mode**
+#### **Option 2: Start with Main Application**
 ```bash
-node gekko.js --config config.js
+npm start
+```
+This starts the main Gekko application with UI at `http://localhost:3000`
+
+#### **Option 3: Command Line Mode**
+```bash
+node gekko.js --config sample-config.js
+```
+
+#### **Option 4: With Custom Config**
+```bash
+node gekko.js --config config.js --ui
 ```
 
 ### **Access the Application**
-- **Unified Web Interface**: http://localhost:3000
-- **API Endpoints**: http://localhost:3000/api
+- **Web Server (Vue UI)**: http://localhost:8080
+- **Main Application**: http://localhost:3000
 
 ## 🔧 **Configuration**
 
@@ -282,23 +277,6 @@ docker build -f Dockerfile.prod -t gekko-pro .
 docker run -d -p 3000:3000 gekko-pro
 ```
 
-## 🧪 **Testing**
-
-### **Run Comprehensive Tests**
-```bash
-# Test all functionality
-node test-functional.js
-```
-
-### **Manual Testing Checklist**
-- [ ] Server starts on port 3000
-- [ ] Web UI loads correctly
-- [ ] API endpoints respond
-- [ ] Strategies can be configured
-- [ ] Market watcher starts
-- [ ] Backtesting works
-- [ ] Paper trading functions
-
 ## 📚 **Documentation**
 
 ### **API Documentation**
@@ -350,36 +328,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: [GitHub Issues](https://github.com/devtar-code/gekko/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/devtar-code/gekko/discussions)
 - **Documentation**: [Wiki](https://github.com/devtar-code/gekko/wiki)
-
-## 🔧 **Troubleshooting**
-
-### **Common Issues**
-
-1. **Port 3000 already in use:**
-   ```bash
-   # Kill existing processes
-   taskkill /f /im node.exe
-   ```
-
-2. **Vue build errors:**
-   ```bash
-   # Clear node_modules and reinstall
-   cd web/vue
-   rm -rf node_modules package-lock.json
-   npm install
-   npm run build
-   ```
-
-3. **Strategy startup errors:**
-   - Check config.js for correct strategy configuration
-   - Ensure all dependencies are installed
-   - Verify exchange API keys if using live trading
-
-4. **Database errors:**
-   ```bash
-   # Reset SQLite database
-   rm -rf history/*.db
-   ```
 
 ---
 

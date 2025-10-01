@@ -2,6 +2,7 @@
 
 var util = require(__dirname + '/../util');
 var log = require(util.dirs().core + 'log');
+var EventEmitter = require('events');
 
 var _ = require('lodash');
 var moment = require('moment');
@@ -14,12 +15,15 @@ else
   var TICKRATE = 20;
 
 var Heart = function() {
+  EventEmitter.call(this);
   this.lastTick = false;
 
-  _.bindAll(this);
+  // Explicitly bind methods to ensure correct `this` context with timers
+  _.bindAll(this, 'pump', 'tick', 'scheduleTicks');
 }
 
-util.makeEventEmitter(Heart);
+Heart.prototype = Object.create(EventEmitter.prototype);
+Heart.prototype.constructor = Heart;
 
 Heart.prototype.pump = function() {
   log.debug('scheduling ticks');

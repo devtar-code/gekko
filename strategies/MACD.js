@@ -31,7 +31,7 @@ method.init = function() {
   this.requiredHistory = this.tradingAdvisor.historySize;
 
   // define the indicators we need
-  this.addIndicator('macd', 'MACD', this.settings);
+  this.addIndicator('macd', 'MACD', this.settings || {});
 }
 
 // what happens on every new candle?

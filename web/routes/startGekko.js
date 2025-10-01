@@ -5,64 +5,199 @@ const Logger = require('../state/logger');
 const apiKeyManager= cache.get('apiKeyManager');
 const gekkoManager = cache.get('gekkos');
 const security = require('../security');
+const util = require('../../core/util');
 
 const base = require('./baseConfig');
 
 // starts an import
 // requires a post body with a config object
 module.exports = function *() {
-  const mode = this.request.body.mode;
-
-  let config = {};
-
-  _.merge(config, base, this.request.body);
-
-  // Validate and sanitize the configuration
   try {
-    const { error, value } = security.configValidationSchema.validate(config, {
-      abortEarly: false,
-      stripUnknown: true
-    });
+    const mode = this.request.body.mode;
 
-    if (error) {
+    if (!mode) {
       this.status = 400;
-      this.body = {
-        error: 'Invalid configuration',
-        details: error.details.map(d => d.message)
-      };
+      this.body = { error: 'Mode is required' };
       return;
     }
 
-    // Sanitize and convert types
-    if (value.tradingAdvisor) {
-      value.tradingAdvisor.candleSize = parseInt(value.tradingAdvisor.candleSize, 10);
-      value.tradingAdvisor.historySize = parseInt(value.tradingAdvisor.historySize, 10);
+    let config = {};
+
+    // Merge base config first
+    _.merge(config, base);
+    
+    // Then merge request body, but ensure tradingAdvisor is properly handled
+    _.merge(config, this.request.body);
+    
+         // Ensure tradingAdvisor is properly configured if enabled
+     if (this.request.body.tradingAdvisor && this.request.body.tradingAdvisor.enabled) {
+       config.tradingAdvisor = {
+         enabled: true,
+         method: this.request.body.tradingAdvisor.method || 'MACD',
+         candleSize: parseInt(this.request.body.tradingAdvisor.candleSize || 1, 10),
+         historySize: parseInt(this.request.body.tradingAdvisor.historySize || 10, 10)
+       };
+       
+               // For strategy runners, we need to ensure there's a market watcher first
+        // Set market type to 'leech' for strategy runners so they get classified correctly
+        // but don't try to leech immediately - let them run as standalone first
+        config.market = {
+          type: 'leech'
+        };
+       
+       // Enable candleWriter for strategy runners so they can store data
+       config.candleWriter = {
+         enabled: true
+       };
+       
+               // Add a delay to ensure market data is available before starting strategy
+        // config.delay = 5000; // 5 second delay
+       
+       // Ensure strategy runners have proper adapter configuration
+       if (!config.adapter) {
+         config.adapter = 'sqlite';
+       }
+     } else {
+       // For market watchers, ensure they have proper configuration
+       config.tradingAdvisor = {
+         enabled: false,
+         candleSize: 1,
+         historySize: 10
+       };
+       
+       // Enable candleWriter for market watchers to store data for strategy runners
+       config.candleWriter = {
+         enabled: true
+       };
+       
+       // Ensure market watchers have proper adapter configuration
+       if (!config.adapter) {
+         config.adapter = 'sqlite';
+       }
+     }
+
+    // Validate and sanitize the configuration
+    try {
+      // Validate required fields
+      if (!config.watch || !config.watch.exchange || !config.watch.asset || !config.watch.currency) {
+        this.status = 400;
+        this.body = { error: 'Invalid watch configuration. Exchange, asset, and currency are required.' };
+        return;
+      }
+
+      // Sanitize and convert types
+      if (config.tradingAdvisor) {
+        if (config.tradingAdvisor.candleSize) {
+          config.tradingAdvisor.candleSize = parseInt(config.tradingAdvisor.candleSize, 10);
+          if (isNaN(config.tradingAdvisor.candleSize) || config.tradingAdvisor.candleSize <= 0) {
+            this.status = 400;
+            this.body = { error: 'Invalid candle size' };
+            return;
+          }
+        }
+        
+        if (config.tradingAdvisor.historySize) {
+          config.tradingAdvisor.historySize = parseInt(config.tradingAdvisor.historySize, 10);
+          if (isNaN(config.tradingAdvisor.historySize) || config.tradingAdvisor.historySize <= 0) {
+            this.status = 400;
+            this.body = { error: 'Invalid history size' };
+            return;
+          }
+        }
+      }
+
+      // Ensure paperTrader has default values if not provided
+      if (config.paperTrader && config.paperTrader.enabled && !config.paperTrader.simulationBalance) {
+        config.paperTrader.simulationBalance = {
+          asset: 1,
+          currency: 1000
+        };
+      }
+
+      // Validate exchange
+      const exchangeName = config.watch.exchange.toLowerCase();
+      try {
+        require(util.dirs().gekko + 'exchange/wrappers/' + exchangeName);
+      } catch (err) {
+        this.status = 400;
+        this.body = { error: `Unsupported exchange: ${exchangeName}` };
+        return;
+      }
+
+    } catch (err) {
+      this.status = 500;
+      this.body = { error: 'Internal validation error: ' + err.message };
+      return;
     }
 
-    config = value;
-  } catch (err) {
+    // Attach API keys if needed
+    if(config.trader && config.trader.enabled && !config.trader.key) {
+      const keys = apiKeyManager._getApiKeyPair(config.watch.exchange);
+
+      if(!keys) {
+        this.status = 400;
+        this.body = { error: 'No API keys found for this exchange. Please configure API keys or enable paper trading.' };
+        return;
+      }
+
+      _.merge(config.trader, keys);
+    }
+
+    // Add child to parent communication
+    config.childToParent = {
+      enabled: true
+    };
+
+    console.log(`Starting new Gekko with mode: ${mode}, exchange: ${config.watch.exchange}, pair: ${config.watch.asset}/${config.watch.currency}`);
+
+    // If this is a strategy runner, ensure there's a market watcher first
+    if (this.request.body.tradingAdvisor && this.request.body.tradingAdvisor.enabled) {
+      // Check if there's already a market watcher for this exchange/pair
+      const existingGekkos = gekkoManager.gekkos;
+      const hasWatcher = Object.values(existingGekkos).some(gekko => 
+        gekko.type === 'watcher' && 
+        gekko.config.watch.exchange === config.watch.exchange &&
+        gekko.config.watch.asset === config.watch.asset &&
+        gekko.config.watch.currency === config.watch.currency
+      );
+
+      if (!hasWatcher) {
+        console.log(`Creating market watcher for ${config.watch.exchange} ${config.watch.asset}/${config.watch.currency}`);
+        
+        // Create a market watcher config
+        const watcherConfig = {
+          ...config,
+          tradingAdvisor: {
+            enabled: false,
+            candleSize: 1,
+            historySize: 10
+          },
+          paperTrader: {
+            enabled: false
+          }
+        };
+        delete watcherConfig.market; // Remove leech configuration
+
+        // Create the market watcher
+        const watcherState = gekkoManager.add({config: watcherConfig, mode});
+        console.log(`Market watcher created: ${watcherState.id}`);
+      }
+    }
+
+    const state = gekkoManager.add({config, mode});
+
+    if (!state || !state.id) {
+      this.status = 500;
+      this.body = { error: 'Failed to create Gekko instance' };
+      return;
+    }
+
+    this.status = 200;
+    this.body = state;
+    
+  } catch (error) {
+    console.error('Error in startGekko:', error);
     this.status = 500;
-    this.body = { error: 'Internal validation error' };
-    return;
+    this.body = { error: 'Internal server error: ' + error.message };
   }
-
-  // Attach API keys
-  if(config.trader && config.trader.enabled && !config.trader.key) {
-
-    const keys = apiKeyManager._getApiKeyPair(config.watch.exchange);
-
-    if(!keys) {
-      this.body = 'No API keys found for this exchange.';
-      return;
-    }
-
-    _.merge(
-      config.trader,
-      keys
-    );
-  }
-
-  const state = gekkoManager.add({config, mode});
-
-  this.body = state;
 }

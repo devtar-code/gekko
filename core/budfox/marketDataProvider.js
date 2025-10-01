@@ -13,7 +13,8 @@ const dirs = util.dirs();
 
 const Manager = function(config) {
 
-  _.bindAll(this);
+  // Ensure methods have the correct `this` when used as event handlers
+  _.bindAll(this, 'retrieve', 'relayTrades', 'sendMarketStart');
 
   // fetch trades
   this.source = new MarketFetcher(config);

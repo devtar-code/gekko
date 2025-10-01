@@ -11,7 +11,7 @@ var Store = function(done, pluginMeta) {
   this.done = done;
 
   this.db = sqlite.initDB(false);
-  this.db.serialize(this.upsertTables);
+  this.db.serialize(() => this.upsertTables());
 
   this.cache = [];
   this.buffered = util.gekkoMode() === "importer";
@@ -41,11 +41,20 @@ Store.prototype.upsertTables = function() {
     // ``
   ];
 
-  var next = _.after(_.size(createQueries), this.done);
+  var completed = 0;
+  var total = createQueries.length;
+  
+  var next = function() {
+    completed++;
+    if (completed === total) {
+      this.done();
+    }
+  }.bind(this);
 
+  var self = this;
   _.each(createQueries, function(q) {
-    this.db.run(q, next);
-  }, this);
+    self.db.run(q, next);
+  });
 }
 
 Store.prototype.writeCandles = function() {

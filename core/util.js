@@ -14,6 +14,20 @@ var _gekkoMode = false;
 var _gekkoEnv = false;
 
 var _args = false;
+var _opts = false;
+
+// Commander v11 stores parsed options on program.opts(); fall back to legacy
+var getOpts = function() {
+  if(_opts)
+    return _opts;
+
+  if(typeof program.opts === 'function')
+    _opts = program.opts();
+  else
+    _opts = program;
+
+  return _opts;
+}
 
 // helper functions
 var util = {
@@ -22,13 +36,15 @@ var util = {
     if(_config)
       return _config;
 
-    if(!program.config)
+    var opts = getOpts();
+
+    if(!opts.config)
         util.die('Please specify a config file.', true);
 
-    if(!fs.existsSync(util.dirs().gekko + program.config))
+    if(!fs.existsSync(util.dirs().gekko + opts.config))
       util.die('Cannot find the specified config file.', true);
 
-    _config = require(util.dirs().gekko + program.config);
+    _config = require(util.dirs().gekko + opts.config);
     return _config;
   },
   // overwrite the whole config
@@ -135,9 +151,11 @@ var util = {
     if(_gekkoMode)
       return _gekkoMode;
 
-    if(program['import'])
+    var opts = getOpts();
+
+    if(opts['import'])
       return 'importer';
-    else if(program.backtest)
+    else if(opts.backtest)
       return 'backtest';
     else
       return 'realtime';
@@ -156,7 +174,8 @@ var util = {
     return _gekkoEnv || 'standalone';
   },
   launchUI: function() {
-    if(program['ui'])
+    var opts = getOpts();
+    if(opts['ui'])
       return true;
     else
       return false;

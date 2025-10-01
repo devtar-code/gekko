@@ -20,6 +20,7 @@ Reader.prototype.mostRecentWindow = function(from, to, next) {
 
   var maxAmount = to - from + 1;
 
+  var self = this;
   this.db.all(`
     SELECT start from ${sqliteUtil.table('candles')}
     WHERE start <= ${to} AND start >= ${from}
@@ -79,6 +80,7 @@ Reader.prototype.mostRecentWindow = function(from, to, next) {
 
 Reader.prototype.tableExists = function(name, next) {
 
+  var self = this;
   this.db.all(`
     SELECT name FROM sqlite_master WHERE type='table' AND name='${sqliteUtil.table(name)}';
   `, function(err, rows) {
@@ -95,6 +97,7 @@ Reader.prototype.get = function(from, to, what, next) {
   if(what === 'full')
     what = '*';
 
+  var self = this;
   this.db.all(`
     SELECT ${what} from ${sqliteUtil.table('candles')}
     WHERE start <= ${to} AND start >= ${from}
@@ -110,6 +113,7 @@ Reader.prototype.get = function(from, to, what, next) {
 }
 
 Reader.prototype.count = function(from, to, next) {
+  var self = this;
   this.db.all(`
     SELECT COUNT(*) as count from ${sqliteUtil.table('candles')}
     WHERE start <= ${to} AND start >= ${from}
@@ -124,6 +128,7 @@ Reader.prototype.count = function(from, to, next) {
 }
 
 Reader.prototype.countTotal = function(next) {
+  var self = this;
   this.db.all(`
     SELECT COUNT(*) as count from ${sqliteUtil.table('candles')}
   `, function(err, res) {
@@ -138,7 +143,8 @@ Reader.prototype.countTotal = function(next) {
 
 Reader.prototype.getBoundry = function(next) {
 
-  this.db.all(`
+  var self = this;
+  self.db.all(`
     SELECT
     (
       SELECT start

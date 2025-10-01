@@ -44,7 +44,7 @@ const init = () => {
 
 const sync = () => {
   bus.$on('apiKeys', data => {
-    store.commit('syncApiKeys', data.exchanges);
+    store.commit('syncApiKeys', data);
   });
 }
 

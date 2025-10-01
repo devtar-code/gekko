@@ -38,13 +38,16 @@ var Market = function() {
 
   Readable.call(this, {objectMode: true});
 
+
+
   this.reader = new Reader();
+  // Ensure instance methods keep the correct `this` context
+  this.get = this.get.bind(this);
+  this.processCandles = this.processCandles.bind(this);
   this.latestTs = fromTs;
 
-  setInterval(
-    this.get,
-    TICKINTERVAL
-  );
+  // Periodically fetch new candles with a bound callback
+  setInterval(() => this.get(), TICKINTERVAL);
 }
 
 var Readable = require('stream').Readable;
@@ -59,6 +62,12 @@ Market.prototype._read = _.once(function() {
 Market.prototype.get = function() {
   var future = moment().add(1, 'minute').unix();
 
+  // Check if reader is properly initialized
+  if (!this.reader || !this.reader.get) {
+    console.log('Leech market: Reader not properly initialized, skipping get request');
+    return;
+  }
+
   this.reader.get(
     this.latestTs,
     future,
@@ -68,6 +77,11 @@ Market.prototype.get = function() {
 }
 
 Market.prototype.processCandles = function(err, candles) {
+  if(err) {
+    console.log('Leech market: Error getting candles:', err.message);
+    return;
+  }
+
   var amount = _.size(candles);
   if(amount === 0) {
     // no new candles!
