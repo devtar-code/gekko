@@ -10,9 +10,10 @@ var Reader = function() {
   _.bindAll(this);
   this.db = sqlite.initDB(true);
   
+  // Database might not exist yet (e.g., no data imported)
+  // This is okay - methods will handle it gracefully
   if (!this.db) {
-    log.error('Failed to initialize SQLite database connection');
-    throw new Error('Database initialization failed');
+    log.debug('SQLite database does not exist yet (no historical data)');
   }
 }
 
@@ -26,6 +27,12 @@ Reader.prototype.mostRecentWindow = function(from, to, next) {
   var maxAmount = to - from + 1;
 
   var self = this;
+  
+  // If no database, no candles available
+  if (!this.db) {
+    return next(false);
+  }
+  
   this.db.all(`
     SELECT start from ${sqliteUtil.table('candles')}
     WHERE start <= ${to} AND start >= ${from}
@@ -86,6 +93,11 @@ Reader.prototype.mostRecentWindow = function(from, to, next) {
 Reader.prototype.tableExists = function(name, next) {
 
   var self = this;
+  
+  if (!this.db) {
+    return next(null, false);
+  }
+  
   this.db.all(`
     SELECT name FROM sqlite_master WHERE type='table' AND name='${sqliteUtil.table(name)}';
   `, function(err, rows) {
@@ -103,6 +115,11 @@ Reader.prototype.get = function(from, to, what, next) {
     what = '*';
 
   var self = this;
+  
+  if (!this.db) {
+    return next(null, []);
+  }
+  
   this.db.all(`
     SELECT ${what} from ${sqliteUtil.table('candles')}
     WHERE start <= ${to} AND start >= ${from}
@@ -119,6 +136,11 @@ Reader.prototype.get = function(from, to, what, next) {
 
 Reader.prototype.count = function(from, to, next) {
   var self = this;
+  
+  if (!this.db) {
+    return next(null, 0);
+  }
+  
   this.db.all(`
     SELECT COUNT(*) as count from ${sqliteUtil.table('candles')}
     WHERE start <= ${to} AND start >= ${from}
@@ -134,6 +156,11 @@ Reader.prototype.count = function(from, to, next) {
 
 Reader.prototype.countTotal = function(next) {
   var self = this;
+  
+  if (!this.db) {
+    return next(null, 0);
+  }
+  
   this.db.all(`
     SELECT COUNT(*) as count from ${sqliteUtil.table('candles')}
   `, function(err, res) {
@@ -150,9 +177,9 @@ Reader.prototype.getBoundry = function(next) {
 
   var self = this;
   
-  if (!self.db || !self.db.open) {
-    log.error('Database connection is not available in getBoundry');
-    return next(new Error('Database connection unavailable'));
+  if (!self.db) {
+    // No database yet means no data boundaries
+    return next(null, false);
   }
   
   self.db.all(`

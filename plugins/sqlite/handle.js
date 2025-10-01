@@ -59,10 +59,23 @@ module.exports = {
     var journalMode = config.sqlite.journalMode || 'PERSIST';
     var syncMode = journalMode === 'WAL' ? 'NORMAL' : 'FULL';
   
+    // For readonly, check if file exists first
+    if (readOnly && !fs.existsSync(fullPath)) {
+      console.log('Database file does not exist yet for readonly access:', fullPath);
+      return null;
+    }
+    
+    // Always allow creation for write mode, only readonly for read mode
     var dbMode = readOnly ? sqlite3.OPEN_READONLY : (sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
     
     try {
-      var db = new sqlite3.Database(fullPath, dbMode);
+      var db = new sqlite3.Database(fullPath, dbMode, (err) => {
+        if (err) {
+          console.error('Error opening database:', err.message);
+          return null;
+        }
+      });
+      
       db.run('PRAGMA synchronous = ' + syncMode);
       db.run('PRAGMA journal_mode = ' + journalMode);
       db.configure('busyTimeout', 10000);
