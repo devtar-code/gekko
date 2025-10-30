@@ -49,8 +49,6 @@ var moment = require('moment');
 var util = require(__dirname + '/../util');
 
 var CandleCreator = function() {
-  _.bindAll(this);
-
   // TODO: remove fixed date
   this.threshold = moment("1970-01-01", "YYYY-MM-DD");
 
@@ -84,21 +82,19 @@ CandleCreator.prototype.write = function(batch) {
 CandleCreator.prototype.filter = function(trades) {
   // make sure we only include trades more recent
   // than the previous emitted candle
-  return _.filter(trades, function(trade) {
-    return trade.date > this.threshold;
-  }, this);
+  return trades.filter(trade => trade.date > this.threshold);
 }
 
 // put each trade in a per minute bucket
 CandleCreator.prototype.fillBuckets = function(trades) {
-  _.each(trades, function(trade) {
+  trades.forEach(trade => {
     var minute = trade.date.format('YYYY-MM-DD HH:mm');
 
     if(!(minute in this.buckets))
       this.buckets[minute] = [];
 
     this.buckets[minute].push(trade);
-  }, this);
+  });
 
   this.lastTrade = _.last(trades);
 }
@@ -112,7 +108,7 @@ CandleCreator.prototype.calculateCandles = function() {
     // create a string referencing the minute this trade happened in
     var lastMinute = this.lastTrade.date.format('YYYY-MM-DD HH:mm');
 
-  var candles = _.map(this.buckets, function(bucket, name) {
+  var candles = _.map(this.buckets, (bucket, name) => {
     var candle = this.calculateCandle(bucket);
 
     // clean all buckets, except the last one:
@@ -121,7 +117,7 @@ CandleCreator.prototype.calculateCandles = function() {
       delete this.buckets[name];
 
     return candle;
-  }, this);
+  });
 
   return candles;
 }
@@ -142,7 +138,7 @@ CandleCreator.prototype.calculateCandle = function(trades) {
     trades: _.size(trades)
   };
 
-  _.each(trades, function(trade) {
+  trades.forEach(trade => {
     candle.high = _.max([candle.high, f(trade.price)]);
     candle.low = _.min([candle.low, f(trade.price)]);
     candle.volume += f(trade.amount);

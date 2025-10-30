@@ -32,10 +32,11 @@ CandleBatcher.prototype.write = function(candles) {
 
   this.emitted = 0;
 
-  _.each(candles, function(candle) {
+  // Lodash v4 no longer binds `thisArg`, use arrow function to preserve context
+  _.each(candles, (candle) => {
     this.smallCandles.push(candle);
     this.check();
-  }, this);
+  });
 
   return this.emitted;
 }

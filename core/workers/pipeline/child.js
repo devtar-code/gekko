@@ -20,6 +20,8 @@
 
 */
 
+process.noDeprecation = true;
+
 var start = (mode, config) => {
   var util = require(__dirname + '/../../util');
 

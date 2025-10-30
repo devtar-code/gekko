@@ -109,9 +109,10 @@ TradeBatcher.prototype.filter = function(batch) {
   // weed out known trades
   // TODO: optimize by stopping as soon as the
   // first trade is too old (reverse first)
-  return _.filter(batch, function(trade) {
+  // Lodash v4 removed thisArg, use arrow function to capture instance
+  return _.filter(batch, (trade) => {
     return this.last < trade[this.tid];
-  }, this);
+  });
 }
 
 TradeBatcher.prototype.convertDates = function(batch) {
