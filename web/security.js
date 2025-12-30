@@ -2,6 +2,7 @@ const Joi = require('joi');
 
 // Configure logging
 const logger = {
+  level: 'info',
   info: (message, meta) => console.log(`[INFO] ${message}`, meta),
   warn: (message, meta) => console.warn(`[WARN] ${message}`, meta),
   error: (message, meta) => console.error(`[ERROR] ${message}`, meta)
@@ -49,10 +50,10 @@ const configValidationSchema = Joi.object({
   }).optional()
 });
 
-// Koa middleware for validation
-const validateConfig = function *(next) {
+// Koa v2+ async middleware for validation
+const validateConfig = async (ctx, next) => {
   try {
-    const { error, value } = configValidationSchema.validate(this.request.body, {
+    const { error, value } = configValidationSchema.validate(ctx.request.body, {
       abortEarly: false,
       stripUnknown: true
     });
@@ -60,10 +61,10 @@ const validateConfig = function *(next) {
     if (error) {
       logger.warn('Configuration validation failed', {
         errors: error.details.map(d => d.message),
-        body: this.request.body
+        body: ctx.request.body
       });
-      this.status = 400;
-      this.body = {
+      ctx.status = 400;
+      ctx.body = {
         error: 'Invalid configuration',
         details: error.details.map(d => d.message)
       };
@@ -76,74 +77,139 @@ const validateConfig = function *(next) {
       value.tradingAdvisor.historySize = parseInt(value.tradingAdvisor.historySize, 10);
     }
 
-    this.request.body = value;
-    yield next;
+    ctx.request.body = value;
+    await next();
   } catch (err) {
     logger.error('Validation error', { error: err.message, stack: err.stack });
-    this.status = 500;
-    this.body = { error: 'Internal validation error' };
+    ctx.status = 500;
+    ctx.body = { error: 'Internal validation error' };
   }
 };
 
-// Koa middleware for request logging
-const requestLogger = function *(next) {
+// Koa v2+ async middleware for request logging
+const requestLogger = async (ctx, next) => {
   const start = Date.now();
-  yield next;
+  await next();
   const duration = Date.now() - start;
   logger.info('Request processed', {
-    method: this.method,
-    url: this.url,
-    status: this.status,
+    method: ctx.method,
+    url: ctx.url,
+    status: ctx.status,
     duration: `${duration}ms`,
-    ip: this.ip,
-    userAgent: this.get('User-Agent')
+    ip: ctx.ip,
+    userAgent: ctx.get('User-Agent')
   });
 };
 
-// Koa middleware for error handling
-const errorHandler = function *(next) {
+// Koa v2+ async middleware for error handling
+const errorHandler = async (ctxOrErr, nextOrReq, res, next) => {
+  // Support both Koa (ctx,next) and Express-style (err, req, res, next)
+  const isExpressStyle = ctxOrErr instanceof Error;
+  if (isExpressStyle) {
+    const err = ctxOrErr;
+    const req = nextOrReq;
+    logger.error('Unhandled error', { error: err.message, stack: err.stack, url: req.url, method: req.method, ip: req.ip });
+    const isProduction = process.env.NODE_ENV === 'production';
+    return res.status(500).json({ error: isProduction ? 'Internal server error' : err.message, ...(isProduction ? {} : { stack: err.stack }) });
+  }
+
+  const ctx = ctxOrErr;
+  const nextKoa = nextOrReq;
   try {
-    yield next;
+    await nextKoa();
   } catch (err) {
     logger.error('Unhandled error', {
       error: err.message,
       stack: err.stack,
-      url: this.url,
-      method: this.method,
-      ip: this.ip,
-      userAgent: this.get('User-Agent')
+      url: ctx.url,
+      method: ctx.method,
+      ip: ctx.ip,
+      userAgent: ctx.get('User-Agent')
     });
 
-    // Don't leak error details in production
     const isProduction = process.env.NODE_ENV === 'production';
-    
-    this.status = err.status || 500;
-    this.body = {
+    ctx.status = err.status || 500;
+    ctx.body = {
       error: isProduction ? 'Internal server error' : err.message,
       ...(isProduction ? {} : { stack: err.stack })
     };
   }
 };
 
-// API key validation middleware for Koa
-const validateApiKey = function *(next) {
-  const apiKey = this.headers['x-api-key'] || this.query.apiKey;
-  
-  if (!apiKey) {
-    this.status = 401;
-    this.body = { error: 'API key required' };
-    return;
+// API key validation middleware for Koa v2+
+const validateApiKey = async function() {
+  // Overloaded: Koa (ctx,next) OR Express-style (req,res,next)
+  if (arguments.length >= 3 && !(arguments[0] && arguments[0].headers && arguments[1] && arguments[1].status === undefined)) {
+    // Express-style: (req, res, next)
+    const req = arguments[0];
+    const res = arguments[1];
+    const next = arguments[2];
+    const apiKey = req.headers['x-api-key'] || (req.query && req.query.apiKey);
+    if (!apiKey) {
+      return res.status(401).json({ error: 'API key required' });
+    }
+    if (process.env.NODE_ENV === 'production' && apiKey !== process.env.API_KEY) {
+      logger.warn('Invalid API key attempt', { ip: req.ip });
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+    return next();
+  } else {
+    // Koa: (ctx, next)
+    const ctx = arguments[0];
+    const next = arguments[1];
+    const apiKey = ctx.headers['x-api-key'] || ctx.query.apiKey;
+    if (!apiKey) {
+      ctx.status = 401;
+      ctx.body = { error: 'API key required' };
+      return;
+    }
+    if (process.env.NODE_ENV === 'production' && apiKey !== process.env.API_KEY) {
+      logger.warn('Invalid API key attempt', { ip: ctx.ip });
+      ctx.status = 401;
+      ctx.body = { error: 'Invalid API key' };
+      return;
+    }
+    return next();
   }
-  
-  // In production, validate against stored API keys
-  if (process.env.NODE_ENV === 'production' && apiKey !== process.env.API_KEY) {
-    logger.warn('Invalid API key attempt', { ip: this.ip });
-    this.status = 401;
-    this.body = { error: 'Invalid API key' };
-    return;
-  }
-  
-  yield next;
+};
+
+// Very lightweight CORS and Rate-limiter stubs for tests
+const corsOptions = {
+  origin: ['*'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+};
+
+const cors = async (ctx, next) => {
+  ctx.set('Access-Control-Allow-Origin', '*');
+  ctx.set('Access-Control-Allow-Methods', corsOptions.methods.join(','));
+  ctx.set('Access-Control-Allow-Credentials', 'true');
+  await next();
+};
+
+const createRateLimiter = (windowMs, max) => {
+  let timestamps = [];
+  return async (ctx, next) => {
+    const now = Date.now();
+    timestamps = timestamps.filter(t => now - t < windowMs);
+    if (timestamps.length >= max) {
+      ctx.status = 429;
+      ctx.body = { error: 'Too many requests' };
+      return;
+    }
+    timestamps.push(now);
+    await next();
+  };
+};
+
+// Default rate limiter used in app.use(security.rateLimit)
+const rateLimit = createRateLimiter(1000, 1000);
+
+// Helmet-like config stub for tests
+const helmetConfig = {
+  contentSecurityPolicy: {},
+  hsts: {},
+  noSniff: true
 };
 
 module.exports = {
@@ -152,5 +218,11 @@ module.exports = {
   requestLogger,
   validateApiKey,
   logger,
-  configValidationSchema
+  configValidationSchema,
+  // additional exports for tests & Koa integration
+  cors,
+  corsOptions,
+  createRateLimiter,
+  rateLimit,
+  helmetConfig
 };
