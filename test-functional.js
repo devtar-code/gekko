@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const request = require('request-promise');
+const fetch = require('node-fetch');
 
 class GekkoFunctionalTester {
   constructor() {
@@ -28,13 +28,20 @@ class GekkoFunctionalTester {
     console.log('🔍 Testing Server Health...');
     
     try {
-      const response = await request({
-        url: `${this.baseUrl}/api/info`,
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`${this.baseUrl}/api/info`, {
         method: 'GET',
-        timeout: 5000
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
-      const info = JSON.parse(response);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const info = await response.json();
       console.log('✅ Server is running');
       console.log(`   Version: ${info.version}`);
       console.log(`   Port: 3000`);
@@ -58,12 +65,20 @@ class GekkoFunctionalTester {
 
     for (const endpoint of endpoints) {
       try {
-        const response = await request({
-          url: `${this.baseUrl}${endpoint}`,
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
           method: 'GET',
-          timeout: 5000
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        await response.json(); // Consume response
         console.log(`✅ ${endpoint} - OK`);
         this.testResults.push({ test: `API: ${endpoint}`, passed: true });
       } catch (error) {
@@ -77,13 +92,20 @@ class GekkoFunctionalTester {
     console.log('🔍 Testing Strategies...');
     
     try {
-      const response = await request({
-        url: `${this.baseUrl}/api/strategies`,
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`${this.baseUrl}/api/strategies`, {
         method: 'GET',
-        timeout: 5000
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
-      const strategies = JSON.parse(response);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const strategies = await response.json();
       console.log(`✅ Found ${strategies.length} strategies`);
       
       // Check for common strategies
@@ -109,10 +131,15 @@ class GekkoFunctionalTester {
     console.log('🔍 Testing Basic Market Watcher...');
     
     try {
-      const response = await request({
-        url: `${this.baseUrl}/api/startGekko`,
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(`${this.baseUrl}/api/startGekko`, {
         method: 'POST',
-        json: {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
           mode: 'realtime',
           watch: {
             exchange: 'binance',
@@ -123,23 +150,42 @@ class GekkoFunctionalTester {
             enabled: false
           },
           type: 'market watcher'
-        },
-        timeout: 10000
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
-      if (response && response.id) {
-        console.log(`✅ Market watcher created: ${response.id}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      if (result && result.id) {
+        console.log(`✅ Market watcher created: ${result.id}`);
         this.testResults.push({ test: 'Market Watcher', passed: true });
         
         // Clean up the watcher
         try {
-          await request({
-            url: `${this.baseUrl}/api/stopGekko`,
+          const cleanupController = new AbortController();
+          const cleanupTimeoutId = setTimeout(() => cleanupController.abort(), 5000);
+          
+          const cleanupResponse = await fetch(`${this.baseUrl}/api/stopGekko`, {
             method: 'POST',
-            json: { id: response.id },
-            timeout: 5000
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id: result.id }),
+            signal: cleanupController.signal
           });
-          console.log(`   🧹 Cleaned up watcher: ${response.id}`);
+          clearTimeout(cleanupTimeoutId);
+          
+          if (cleanupResponse.ok) {
+            console.log(`   🧹 Cleaned up watcher: ${result.id}`);
+          } else {
+            console.log(`   ⚠️  Could not clean up watcher: ${cleanupResponse.status}`);
+          }
         } catch (cleanupError) {
           console.log(`   ⚠️  Could not clean up watcher: ${cleanupError.message}`);
         }

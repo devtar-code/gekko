@@ -5,6 +5,7 @@ const serve = require('koa-static');
 const cors = require('koa-cors');
 const _ = require('lodash');
 const bodyParser = require('koa-bodyparser');
+const security = require('./security');
 
 const opn = require('opn');
 const server = require('http').createServer();
@@ -21,12 +22,26 @@ const cache = require('./state/cache');
 const nodeCommand = _.last(process.argv[1].split('/'));
 const isDevServer = nodeCommand === 'server' || nodeCommand === 'server.js';
 
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => {
+  // Security: Add message size limit
+  ws._maxPayload = 10000; // 10KB limit
+  
   ws.isAlive = true;
   ws.on('pong', () => {
     ws.isAlive = true;
   });
   ws.ping(_.noop);
+  
+  // Security: Validate incoming messages
+  ws.on('message', (message) => {
+    if (message.length > 10000) {
+      console.warn(new Date, '[WS] Message too large, closing connection');
+      ws.close(1009, 'Message too large');
+      return;
+    }
+    // Additional message validation can be added here
+  });
+  
   ws.on('error', e => {
     console.error(new Date, '[WS] connection error:', e);
   });
@@ -90,16 +105,17 @@ router.get('/api/imports', listWraper('imports'));
 router.get('/api/gekkos', listWraper('gekkos'));
 router.get('/api/exchanges', require(ROUTE('exchanges')));
 
-router.post('/api/addApiKey', apiKeys.add);
-router.post('/api/removeApiKey', apiKeys.remove);
-router.post('/api/scan', require(ROUTE('scanDateRange')));
-router.post('/api/scansets', require(ROUTE('scanDatasets')));
-router.post('/api/backtest', require(ROUTE('backtest')));
-router.post('/api/import', require(ROUTE('import')));
-router.post('/api/startGekko', require(ROUTE('startGekko')));
-router.post('/api/stopGekko', require(ROUTE('stopGekko')));
-router.post('/api/deleteGekko', require(ROUTE('deleteGekko')));
-router.post('/api/getCandles', require(ROUTE('getCandles')));
+// Apply input validation middleware to critical POST routes
+router.post('/api/addApiKey', security.validateConfig, apiKeys.add);
+router.post('/api/removeApiKey', security.validateConfig, apiKeys.remove);
+router.post('/api/scan', security.validateConfig, require(ROUTE('scanDateRange')));
+router.post('/api/scansets', security.validateConfig, require(ROUTE('scanDatasets')));
+router.post('/api/backtest', security.validateConfig, require(ROUTE('backtest')));
+router.post('/api/import', security.validateConfig, require(ROUTE('import')));
+router.post('/api/startGekko', security.validateConfig, require(ROUTE('startGekko')));
+router.post('/api/stopGekko', security.validateConfig, require(ROUTE('stopGekko')));
+router.post('/api/deleteGekko', security.validateConfig, require(ROUTE('deleteGekko')));
+router.post('/api/getCandles', security.validateConfig, require(ROUTE('getCandles')));
 
 
 // incoming WS:
@@ -107,11 +123,36 @@ router.post('/api/getCandles', require(ROUTE('getCandles')));
 //   ws.on('message', _.noop);
 // });
 
+// Configure CORS with whitelist (security fix)
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:8080'
+];
+
 app
+  .use(security.requestLogger) // Request logging
+  .use(security.errorHandler) // Error handling
   .use(cors({
-    origin: '*',
-    credentials: true
+    origin: (ctx) => {
+      const origin = ctx.headers.origin;
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return '*';
+      // Check if origin is in whitelist
+      if (allowedOrigins.includes(origin)) {
+        return origin;
+      }
+      // In development, allow localhost variations
+      if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost')) {
+        return origin;
+      }
+      return false;
+    },
+    credentials: true,
+    maxAge: 86400 // 24 hours
   }))
+  .use(security.rateLimit) // Rate limiting
   .use(serve(WEBROOT + 'vue/dist'))
   .use(bodyParser({
     enableTypes: ['json', 'form', 'text'],

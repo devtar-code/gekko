@@ -20,6 +20,8 @@
 
 */
 
+process.noDeprecation = true;
+
 console.log(`
     ______   ________  __    __  __    __   ______
    /      \\ /        |/  |  /  |/  |  /  | /      \\
