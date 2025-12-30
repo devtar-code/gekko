@@ -105,17 +105,19 @@ router.get('/api/imports', listWraper('imports'));
 router.get('/api/gekkos', listWraper('gekkos'));
 router.get('/api/exchanges', require(ROUTE('exchanges')));
 
-// Apply input validation middleware to critical POST routes
-router.post('/api/addApiKey', security.validateConfig, apiKeys.add);
-router.post('/api/removeApiKey', security.validateConfig, apiKeys.remove);
-router.post('/api/scan', security.validateConfig, require(ROUTE('scanDateRange')));
-router.post('/api/scansets', security.validateConfig, require(ROUTE('scanDatasets')));
+// Apply strict config validation only to endpoints that accept a full Gekko config.
+// NOTE: `security.validateConfig` currently requires `watch` + `tradingAdvisor` fields,
+// so it should NOT be used for endpoints with different payload shapes (like apiKeys, stopGekko, etc).
+router.post('/api/addApiKey', apiKeys.add);
+router.post('/api/removeApiKey', apiKeys.remove);
+router.post('/api/scan', require(ROUTE('scanDateRange')));
+router.post('/api/scansets', require(ROUTE('scanDatasets')));
 router.post('/api/backtest', security.validateConfig, require(ROUTE('backtest')));
 router.post('/api/import', security.validateConfig, require(ROUTE('import')));
 router.post('/api/startGekko', security.validateConfig, require(ROUTE('startGekko')));
-router.post('/api/stopGekko', security.validateConfig, require(ROUTE('stopGekko')));
-router.post('/api/deleteGekko', security.validateConfig, require(ROUTE('deleteGekko')));
-router.post('/api/getCandles', security.validateConfig, require(ROUTE('getCandles')));
+router.post('/api/stopGekko', require(ROUTE('stopGekko')));
+router.post('/api/deleteGekko', require(ROUTE('deleteGekko')));
+router.post('/api/getCandles', require(ROUTE('getCandles')));
 
 
 // incoming WS:
