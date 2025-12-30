@@ -10,7 +10,7 @@
     "finance"
   ],
   "scripts": {
-    "test": "./node_modules/.bin/mocha test/*.js --recursive test -u tdd --reporter spec",
+    "test": "node scripts/run-mocha.js",
     "start": "node ./gekko.js --config config.js --ui",
     "start:secure": "NODE_ENV=production node ./gekko.js --config config.js --ui",
     "audit": "npm audit && npm audit --audit-level=moderate",
