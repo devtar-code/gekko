@@ -50,90 +50,39 @@ const configValidationSchema = Joi.object({
   }).optional()
 });
 
-// Flexible validation middleware - validates based on route
+// Koa v2+ async middleware for validation
 const validateConfig = async (ctx, next) => {
   try {
-    // Skip validation for GET requests
-    if (ctx.method === 'GET') {
-      return await next();
-    }
+    const { error, value } = configValidationSchema.validate(ctx.request.body, {
+      abortEarly: false,
+      stripUnknown: true
+    });
 
-    const body = ctx.request.body || {};
-    
-    // Basic validation - ensure body is an object
-    if (typeof body !== 'object' || body === null) {
+    if (error) {
+      logger.warn('Configuration validation failed', {
+        errors: error.details.map(d => d.message),
+        body: ctx.request.body
+      });
       ctx.status = 400;
-      ctx.body = { error: 'Invalid request body' };
+      ctx.body = {
+        error: 'Invalid configuration',
+        details: error.details.map(d => d.message)
+      };
       return;
     }
 
-    // Validate based on endpoint
-    let schema = configValidationSchema;
-    
-    // For startGekko, backtest, import - use full validation
-    if (ctx.path.includes('startGekko') || ctx.path.includes('backtest') || ctx.path.includes('import')) {
-      const { error, value } = schema.validate(body, {
-        abortEarly: false,
-        stripUnknown: true,
-        allowUnknown: true // Allow additional fields
-      });
-
-      if (error) {
-        logger.warn('Configuration validation failed', {
-          errors: error.details.map(d => d.message),
-          path: ctx.path
-        });
-        ctx.status = 400;
-        ctx.body = {
-          error: 'Invalid configuration',
-          details: error.details.map(d => d.message)
-        };
-        return;
-      }
-
-      // Sanitize and convert types
-      if (value.tradingAdvisor) {
-        if (value.tradingAdvisor.candleSize) {
-          value.tradingAdvisor.candleSize = parseInt(value.tradingAdvisor.candleSize, 10);
-          if (isNaN(value.tradingAdvisor.candleSize) || value.tradingAdvisor.candleSize <= 0) {
-            ctx.status = 400;
-            ctx.body = { error: 'Invalid candle size' };
-            return;
-          }
-        }
-        if (value.tradingAdvisor.historySize) {
-          value.tradingAdvisor.historySize = parseInt(value.tradingAdvisor.historySize, 10);
-          if (isNaN(value.tradingAdvisor.historySize) || value.tradingAdvisor.historySize <= 0) {
-            ctx.status = 400;
-            ctx.body = { error: 'Invalid history size' };
-            return;
-          }
-        }
-      }
-
-      ctx.request.body = value;
-    } else {
-      // For other endpoints, just sanitize basic types
-      // Sanitize exchange names
-      if (body.watch && body.watch.exchange) {
-        body.watch.exchange = String(body.watch.exchange).toLowerCase().replace(/[^a-z0-9]/g, '');
-      }
-      if (body.watch && body.watch.asset) {
-        body.watch.asset = String(body.watch.asset).toUpperCase().replace(/[^A-Z0-9]/g, '');
-      }
-      if (body.watch && body.watch.currency) {
-        body.watch.currency = String(body.watch.currency).toUpperCase().replace(/[^A-Z0-9]/g, '');
-      }
+    // Sanitize and convert types
+    if (value.tradingAdvisor) {
+      value.tradingAdvisor.candleSize = parseInt(value.tradingAdvisor.candleSize, 10);
+      value.tradingAdvisor.historySize = parseInt(value.tradingAdvisor.historySize, 10);
     }
 
+    ctx.request.body = value;
     await next();
   } catch (err) {
     logger.error('Validation error', { error: err.message, stack: err.stack });
-    const isProduction = process.env.NODE_ENV === 'production';
     ctx.status = 500;
-    ctx.body = { 
-      error: isProduction ? 'Internal validation error' : err.message
-    };
+    ctx.body = { error: 'Internal validation error' };
   }
 };
 
