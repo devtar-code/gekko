@@ -10,74 +10,71 @@
 
 */
 
+const util = require('./util');
+const dirs = util.dirs();
+const _ = require('lodash');
 
-var util = require('./util');
-var dirs = util.dirs();
+const log = require(dirs.core + 'log');
 
-var _ = require('lodash');
-var async = require('async');
-
-var log = require(dirs.core + 'log');
-
-var pipeline = (settings) => {
-
-  var mode = settings.mode;
-  var config = settings.config;
+const pipeline = async (settings) => {
+  const mode = settings.mode;
+  const config = settings.config;
 
   // prepare a GekkoStream
-  var GekkoStream = require(dirs.core + 'gekkoStream');
+  const GekkoStream = require(dirs.core + 'gekkoStream');
 
   // all plugins
-  var plugins = [];
+  let plugins = [];
   // all emitting plugins
-  var emitters = {};
+  const emitters = {};
   // all plugins interested in candles
-  var candleConsumers = [];
+  const candleConsumers = [];
 
   // utility to check and load plugins.
-  var pluginHelper = require(dirs.core + 'pluginUtil');
+  const pluginHelper = require(dirs.core + 'pluginUtil');
 
   // meta information about every plugin that tells Gekko
   // something about every available plugin
-  var pluginParameters = require(dirs.gekko + 'plugins');
+  const pluginParameters = require(dirs.gekko + 'plugins');
   // meta information about the events plugins can broadcast
   // and how they should hooked up to consumers.
-  var subscriptions = require(dirs.gekko + 'subscriptions');
+  const subscriptions = require(dirs.gekko + 'subscriptions');
 
-  var market;
+  let market;
 
   // Instantiate each enabled plugin
-  var loadPlugins = function(next) {
+  const loadPlugins = async () => {
     // load all plugins
-    async.mapSeries(
-      pluginParameters,
-      pluginHelper.load,
-      function(error, _plugins) {
-        if(error)
-          return util.die(error, true);
+    const pluginPromises = pluginParameters.map(p => {
+      return new Promise((resolve, reject) => {
+        pluginHelper.load(p, (err, plugin) => {
+          if (err) return reject(err);
+          resolve(plugin);
+        });
+      });
+    });
 
-        plugins = _.compact(_plugins);
-        next();
-      }
-    );
+    try {
+      const loadedPlugins = await Promise.all(pluginPromises);
+      plugins = _.compact(loadedPlugins);
+    } catch (error) {
+      util.die(error, true);
+    }
   };
 
   // Some plugins emit their own events, store
   // a reference to those plugins.
-  var referenceEmitters = function(next) {
-
+  const referenceEmitters = () => {
     _.each(plugins, function(plugin) {
       if(plugin.meta.emits)
         emitters[plugin.meta.slug] = plugin;
     });
-
-    next();
   }
 
   // Subscribe all plugins to other emitting plugins
-  var subscribePlugins = function(next) {
+  const subscribePlugins = () => {
     // events broadcasted by plugins
-    var pluginSubscriptions = _.filter(
+    const pluginSubscriptions = _.filter(
       subscriptions,
       sub => sub.emitter !== 'market'
     );
@@ -90,15 +87,13 @@ var pipeline = (settings) => {
       subscription => {
         // cache full list
         subscription.emitters = subscription.emitter;
-        var singleEventEmitters = subscription.emitter
+        const singleEventEmitters = subscription.emitter
           .filter(
             s => _.size(plugins.filter(p => p.meta.slug === s))
           );
 
         if(_.size(singleEventEmitters) > 1) {
-          var error = `Multiple plugins are broadcasting`;
-          error += ` the event "${subscription.event}" (${singleEventEmitters.join(',')}).`;
-          error += 'This is unsupported.'
+          const error = `Multiple plugins are broadcasting the event "${subscription.event}" (${singleEventEmitters.join(',')}). This is unsupported.`;
           util.die(error);
         } else {
           subscription.emitter = _.first(singleEventEmitters);
@@ -151,7 +146,7 @@ var pipeline = (settings) => {
     });
 
     // events broadcasted by the market
-    var marketSubscriptions = _.filter(
+    const marketSubscriptions = _.filter(
       subscriptions,
       {emitter: 'market'}
     );
@@ -167,18 +162,20 @@ var pipeline = (settings) => {
 
       });
     });
-
-    next();
   }
 
-  var prepareMarket = function(next) {
-    if(mode === 'backtest' && config.backtest.daterange === 'scan')
-      require(dirs.core + 'prepareDateRange')(next);
-    else
-      next();
+  const prepareMarket = async () => {
+    if(mode === 'backtest' && config.backtest.daterange === 'scan') {
+      return new Promise((resolve, reject) => {
+        require(dirs.core + 'prepareDateRange')(err => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
   }
 
-  var setupMarket = function(next) {
+  const setupMarket = () => {
     // load a market based on the config (or fallback to mode)
     let marketType;
     if(config.market)
@@ -186,24 +183,19 @@ var pipeline = (settings) => {
     else
       marketType = mode;
 
-    var Market = require(dirs.markets + marketType);
-
+    const Market = require(dirs.markets + marketType);
     market = new Market(config);
-
-    next();
   }
 
-  var subscribePluginsToMarket = function(next) {
-
+  const subscribePluginsToMarket = () => {
     // events broadcasted by the market
-    var marketSubscriptions = _.filter(
+    const marketSubscriptions = _.filter(
       subscriptions,
       {emitter: 'market'}
     );
 
     _.each(plugins, function(plugin) {
       _.each(marketSubscriptions, function(sub) {
-
         if(sub.event === 'candle')
           // these are handled via the market stream
           return;
@@ -211,42 +203,27 @@ var pipeline = (settings) => {
         if(plugin[sub.handler]) {
           market.on(sub.event, plugin[sub.handler]);
         }
-
       });
     });
-
-    next();
-
   }
 
   log.info('Setting up Gekko in', mode, 'mode');
   log.info('');
 
-  async.series(
-    [
-      loadPlugins,
-      referenceEmitters,
-      subscribePlugins,
-      prepareMarket,
-      setupMarket,
-      subscribePluginsToMarket
-    ],
-    function() {
+  try {
+    await loadPlugins();
+    referenceEmitters();
+    subscribePlugins();
+    await prepareMarket();
+    setupMarket();
+    subscribePluginsToMarket();
 
-      var gekkoStream = new GekkoStream(plugins);
-
-      market
-        .pipe(gekkoStream)
-
-        // convert JS objects to JSON string
-        // .pipe(new require('stringify-stream')())
-        // output to standard out
-        // .pipe(process.stdout);
-
-      market.on('end', gekkoStream.finalize);
-    }
-  );
-
+    const gekkoStream = new GekkoStream(plugins);
+    market.pipe(gekkoStream);
+    market.on('end', gekkoStream.finalize);
+  } catch (error) {
+    util.die(error, true);
+  }
 }
 
 module.exports = pipeline;

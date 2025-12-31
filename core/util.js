@@ -45,6 +45,11 @@ var util = {
       util.die('Cannot find the specified config file.', true);
 
     _config = require(util.dirs().gekko + opts.config);
+
+    if (opts.headless) {
+      _config.headless = true;
+    }
+
     return _config;
   },
   // overwrite the whole config
@@ -193,6 +198,7 @@ program
   .option('-b, --backtest', 'backtesting mode')
   .option('-i, --import', 'importer mode')
   .option('--ui', 'launch a web UI')
+  .option('--headless', 'do not open the browser')
   .parse(process.argv);
 
 // make sure the current node version is recent enough

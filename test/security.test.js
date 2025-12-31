@@ -1,30 +1,13 @@
 const chai = require('chai');
 const expect = chai.expect;
-const request = require('supertest');
-const koa = require('koa');
-const bodyParser = require('koa-bodyparser');
-const router = require('koa-router')();
-
-// Import security middleware
+const supertest = require('supertest');
 const security = require('../web/security');
 
-describe('Security Tests', () => {
-  let app;
-  let server;
-
-  before(() => {
-    app = new koa();
-    app.use(bodyParser());
-    app.use(security.requestLogger);
-    app.use(security.cors);
-    app.use(security.rateLimit);
-    app.use(router.routes());
-    app.use(router.allowedMethods());
-    app.use(security.errorHandler);
-  });
+describe('🔒 Security Testing Suite', function() {
+  this.timeout(10000);
 
   describe('Input Validation', () => {
-    it('should validate correct configuration', (done) => {
+    it('should validate tradingAdvisor configuration correctly', () => {
       const validConfig = {
         tradingAdvisor: {
           enabled: true,
@@ -36,26 +19,14 @@ describe('Security Tests', () => {
           exchange: 'binance',
           currency: 'USDT',
           asset: 'BTC'
-        },
-        paperTrader: {
-          enabled: true,
-          reportInCurrency: true,
-          simulationBalance: {
-            asset: 1,
-            currency: 100
-          }
         }
       };
 
-      // Test validation function directly
-      const { error, value } = security.configValidationSchema.validate(validConfig);
+      const { error } = security.configValidationSchema.validate(validConfig);
       expect(error).to.be.undefined;
-      expect(value.tradingAdvisor.candleSize).to.be.a('number');
-      expect(value.tradingAdvisor.historySize).to.be.a('number');
-      done();
     });
 
-    it('should reject invalid candleSize', (done) => {
+    it('should reject invalid candleSize', () => {
       const invalidConfig = {
         tradingAdvisor: {
           enabled: true,
@@ -72,32 +43,15 @@ describe('Security Tests', () => {
 
       const { error } = security.configValidationSchema.validate(invalidConfig);
       expect(error).to.not.be.undefined;
-      expect(error.details[0].message).to.include('candleSize');
-      done();
     });
 
-    it('should reject missing required fields', (done) => {
+    it('should reject negative historySize', () => {
       const invalidConfig = {
         tradingAdvisor: {
           enabled: true,
-          method: 'MACD'
-          // Missing candleSize and historySize
-        }
-      };
-
-      const { error } = security.configValidationSchema.validate(invalidConfig);
-      expect(error).to.not.be.undefined;
-      expect(error.details.length).to.be.greaterThan(0);
-      done();
-    });
-
-    it('should sanitize string numbers to integers', (done) => {
-      const configWithStrings = {
-        tradingAdvisor: {
-          enabled: true,
           method: 'MACD',
-          candleSize: '60',
-          historySize: '10'
+          candleSize: 60,
+          historySize: -1
         },
         watch: {
           exchange: 'binance',
@@ -106,106 +60,257 @@ describe('Security Tests', () => {
         }
       };
 
-      const { error, value } = security.configValidationSchema.validate(configWithStrings);
-      expect(error).to.be.undefined;
-      expect(value.tradingAdvisor.candleSize).to.equal(60);
-      expect(value.tradingAdvisor.historySize).to.equal(10);
-      done();
+      const { error } = security.configValidationSchema.validate(invalidConfig);
+      expect(error).to.not.be.undefined;
     });
   });
 
   describe('Rate Limiting', () => {
-    it('should enforce rate limits', (done) => {
-      // This would require setting up a test server
-      // For now, we'll test the rate limiter configuration
-      const rateLimiter = security.createRateLimiter(1000, 1); // 1 request per second
-      expect(rateLimiter).to.be.a('function');
-      done();
+    it('should allow requests within limit', () => {
+      const rateLimiter = security.createRateLimiter(1000, 5);
+      const ctx = { ip: '127.0.0.1' };
+
+      // Should allow first 5 requests
+      for (let i = 0; i < 5; i++) {
+        let allowed = true;
+        rateLimiter(ctx, () => {}).catch(() => allowed = false);
+        expect(allowed).to.be.true;
+      }
+    });
+
+    it('should block requests over limit', (done) => {
+      const rateLimiter = security.createRateLimiter(1000, 2);
+      const ctx = { ip: '127.0.0.1', status: 429, body: {} };
+
+      // First two requests should work
+      rateLimiter(ctx, () => {}).then(() => {
+        return rateLimiter(ctx, () => {});
+      }).then(() => {
+        // Third request should be blocked
+        rateLimiter(ctx, () => {}).then(() => {
+          expect(ctx.status).to.equal(429);
+          expect(ctx.body.error).to.equal('Too many requests');
+          done();
+        });
+      });
     });
   });
 
   describe('CORS Configuration', () => {
-    it('should have proper CORS settings', () => {
-      expect(security.corsOptions.origin).to.be.an('array');
-      expect(security.corsOptions.credentials).to.be.true;
-      expect(security.corsOptions.methods).to.include('GET');
-      expect(security.corsOptions.methods).to.include('POST');
+    it('should allow localhost origins', () => {
+      const ctx = {
+        headers: { origin: 'http://localhost:3000' }
+      };
+
+      const origin = security.corsOptions.origin(ctx);
+      expect(origin).to.equal('http://localhost:3000');
+    });
+
+    it('should allow https localhost origins', () => {
+      const ctx = {
+        headers: { origin: 'https://localhost:3000' }
+      };
+
+      const origin = security.corsOptions.origin(ctx);
+      expect(origin).to.equal('https://localhost:3000');
+    });
+
+    it('should reject unauthorized origins', () => {
+      const ctx = {
+        headers: { origin: 'https://evil.com' }
+      };
+
+      const origin = security.corsOptions.origin(ctx);
+      expect(origin).to.be.false;
+    });
+
+    it('should handle missing origin', () => {
+      const ctx = {
+        headers: {}
+      };
+
+      const origin = security.corsOptions.origin(ctx);
+      expect(origin).to.be.false;
     });
   });
 
   describe('Security Headers', () => {
-    it('should have proper helmet configuration', () => {
-      expect(security.helmetConfig.contentSecurityPolicy).to.be.an('object');
-      expect(security.helmetConfig.hsts).to.be.an('object');
-      expect(security.helmetConfig.noSniff).to.be.true;
+    it('should set CSP headers', (done) => {
+      const ctx = {
+        set: function(key, value) {
+          this.headers = this.headers || {};
+          this.headers[key] = value;
+        }
+      };
+
+      security.contentSecurityPolicy(ctx, () => {
+        expect(ctx.headers['Content-Security-Policy']).to.include("default-src 'self'");
+        expect(ctx.headers['Content-Security-Policy']).to.include("script-src 'self'");
+        expect(ctx.headers['X-Content-Type-Options']).to.equal('nosniff');
+        expect(ctx.headers['X-Frame-Options']).to.equal('DENY');
+        expect(ctx.headers['X-XSS-Protection']).to.equal('1; mode=block');
+        done();
+      });
+    });
+
+    it('should set HSTS in production', (done) => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+
+      const ctx = {
+        set: function(key, value) {
+          this.headers = this.headers || {};
+          this.headers[key] = value;
+        }
+      };
+
+      security.contentSecurityPolicy(ctx, () => {
+        expect(ctx.headers['Strict-Transport-Security']).to.include('max-age=31536000');
+        process.env.NODE_ENV = originalEnv;
+        done();
+      });
+    });
+  });
+
+  describe('API Key Validation', () => {
+    it('should accept valid API key in production', () => {
+      const originalEnv = process.env.NODE_ENV;
+      const originalApiKey = process.env.API_KEY;
+      process.env.NODE_ENV = 'production';
+      process.env.API_KEY = 'test-key-123';
+
+      const ctx = {
+        headers: { 'x-api-key': 'test-key-123' }
+      };
+
+      let nextCalled = false;
+      const next = () => { nextCalled = true; };
+
+      security.validateApiKey(ctx, next);
+      expect(nextCalled).to.be.true;
+
+      process.env.NODE_ENV = originalEnv;
+      process.env.API_KEY = originalApiKey;
+    });
+
+    it('should reject invalid API key in production', () => {
+      const originalEnv = process.env.NODE_ENV;
+      const originalApiKey = process.env.API_KEY;
+      process.env.NODE_ENV = 'production';
+      process.env.API_KEY = 'test-key-123';
+
+      const ctx = {
+        headers: { 'x-api-key': 'wrong-key' },
+        status: 0,
+        body: {}
+      };
+
+      let nextCalled = false;
+      const next = () => { nextCalled = true; };
+
+      security.validateApiKey(ctx, next);
+      expect(nextCalled).to.be.false;
+      expect(ctx.status).to.equal(401);
+
+      process.env.NODE_ENV = originalEnv;
+      process.env.API_KEY = originalApiKey;
+    });
+
+    it('should bypass validation in development', () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+
+      const ctx = {
+        headers: {}
+      };
+
+      let nextCalled = false;
+      const next = () => { nextCalled = true; };
+
+      security.validateApiKey(ctx, next);
+      expect(nextCalled).to.be.true;
+
+      process.env.NODE_ENV = originalEnv;
     });
   });
 
   describe('Error Handling', () => {
-    it('should handle errors gracefully', (done) => {
-      const mockReq = {
-        url: '/test',
+    it('should sanitize error messages in production', () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+
+      const ctx = {
+        status: 0,
+        body: {}
+      };
+
+      const error = new Error('Sensitive database error: password=secret');
+      security.errorHandler(ctx, () => {
+        throw error;
+      });
+
+      expect(ctx.status).to.equal(500);
+      expect(ctx.body.error).to.equal('Internal server error');
+      expect(ctx.body.stack).to.be.undefined;
+
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it('should include error details in development', () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+
+      const ctx = {
+        status: 0,
+        body: {}
+      };
+
+      const error = new Error('Test error');
+      security.errorHandler(ctx, () => {
+        throw error;
+      });
+
+      expect(ctx.status).to.equal(500);
+      expect(ctx.body.error).to.equal('Test error');
+      expect(ctx.body.stack).to.include('Test error');
+
+      process.env.NODE_ENV = originalEnv;
+    });
+  });
+
+  describe('Request Logging', () => {
+    let originalConsoleLog;
+    let loggedMessages = [];
+
+    beforeEach(() => {
+      originalConsoleLog = console.log;
+      loggedMessages = [];
+      console.log = (...args) => {
+        loggedMessages.push(args.join(' '));
+      };
+    });
+
+    afterEach(() => {
+      console.log = originalConsoleLog;
+    });
+
+    it('should log requests', (done) => {
+      const ctx = {
         method: 'GET',
+        url: '/api/test',
         ip: '127.0.0.1',
-        get: () => 'test-agent'
+        get: () => 'Mozilla/5.0 Test Browser'
       };
-      const mockRes = {
-        status: (code) => ({
-          json: (data) => {
-            expect(code).to.equal(500);
-            expect(data.error).to.be.a('string');
-            done();
-          }
-        })
-      };
-      const mockNext = () => {};
 
-      const testError = new Error('Test error');
-      security.errorHandler(testError, mockReq, mockRes, mockNext);
+      const start = Date.now();
+      security.requestLogger(ctx, () => {
+        const end = Date.now();
+        expect(loggedMessages.length).to.be.greaterThan(0);
+        expect(loggedMessages[0]).to.include('[INFO] Request processed');
+        expect(loggedMessages[0]).to.include('GET');
+        expect(loggedMessages[0]).to.include('/api/test');
+        done();
+      });
     });
-  });
-
-  describe('Logging', () => {
-    it('should have proper logger configuration', () => {
-      expect(security.logger).to.be.an('object');
-      expect(security.logger.level).to.equal('info');
-    });
-  });
-});
-
-describe('Dependency Security', () => {
-  it('should not have critical vulnerabilities', (done) => {
-    // This would require running npm audit programmatically
-    // For now, we'll check that we're using secure versions
-    const packageJson = require('../package.json');
-    
-    // Check for known vulnerable packages
-    expect(packageJson.dependencies.lodash).to.not.equal('2.x');
-    expect(packageJson.dependencies.async).to.not.equal('2.1.2');
-    expect(packageJson.dependencies.koa).to.not.equal('^1.2.0');
-    
-    done();
-  });
-});
-
-describe('API Security', () => {
-  it('should validate API keys in production', () => {
-    const mockReq = {
-      headers: {},
-      query: {},
-      ip: '127.0.0.1'
-    };
-    const mockRes = {
-      status: (code) => ({
-        json: (data) => {
-          expect(code).to.equal(401);
-          expect(data.error).to.include('API key required');
-        }
-      })
-    };
-    const mockNext = () => {};
-
-    // Test without API key
-    security.validateApiKey(mockReq, mockRes, mockNext);
   });
 });

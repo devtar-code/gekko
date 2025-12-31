@@ -5,6 +5,7 @@ const serve = require('koa-static');
 const cors = require('koa-cors');
 const _ = require('lodash');
 const bodyParser = require('koa-bodyparser');
+const helmet = require('koa-helmet');
 const security = require('./security');
 
 const opn = require('opn');
@@ -22,7 +23,23 @@ const cache = require('./state/cache');
 const nodeCommand = _.last(process.argv[1].split('/'));
 const isDevServer = nodeCommand === 'server' || nodeCommand === 'server.js';
 
+// Configure CORS with whitelist (security fix)
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:8080'
+];
+
 wss.on('connection', (ws, req) => {
+  // Security: Check origin for WebSocket connections
+  const origin = req.headers.origin;
+  if (process.env.NODE_ENV === 'production' && origin && !allowedOrigins.includes(origin)) {
+    console.warn(new Date, '[WS] Connection attempt from unauthorized origin:', origin);
+    ws.terminate();
+    return;
+  }
+
   // Security: Add message size limit
   ws._maxPayload = 10000; // 10KB limit
   
@@ -95,6 +112,9 @@ const ROUTE = n => WEBROOT + 'routes/' + n;
 
 // attach routes
 const apiKeys = require(ROUTE('apiKeys'));
+router.get('/api/test', async (ctx) => {
+  ctx.body = { status: 'ok' };
+});
 router.get('/api/info', require(ROUTE('info')));
 router.get('/api/strategies', require(ROUTE('strategies')));
 router.get('/api/configPart/:part', require(ROUTE('configPart')));
@@ -125,37 +145,40 @@ router.post('/api/getCandles', require(ROUTE('getCandles')));
 //   ws.on('message', _.noop);
 // });
 
-// Configure CORS with whitelist (security fix)
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-  'http://localhost:3000',
-  'http://localhost:8080',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:8080'
-];
-
 app
+  // .use(helmet({
+  //   contentSecurityPolicy: {
+  //     directives: {
+  //       defaultSrc: ["'self'"],
+  //       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Needed for Vue 2 legacy
+  //       styleSrc: ["'self'", "'unsafe-inline'"],
+  //       imgSrc: ["'self'", "data:", "https:"],
+  //       connectSrc: ["'self'", "ws:", "wss:"],
+  //     },
+  //   },
+  //   referrerPolicy: { policy: 'same-origin' }
+  // }))
   .use(security.requestLogger) // Request logging
-  .use(security.errorHandler) // Error handling
-  .use(cors({
-    origin: (ctx) => {
-      const origin = ctx.headers.origin;
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return '*';
-      // Check if origin is in whitelist
-      if (allowedOrigins.includes(origin)) {
-        return origin;
-      }
-      // In development, allow localhost variations
-      if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost')) {
-        return origin;
-      }
-      return false;
-    },
-    credentials: true,
-    maxAge: 86400 // 24 hours
-  }))
-  .use(security.rateLimit) // Rate limiting
-  .use(serve(WEBROOT + 'vue/dist'))
+  // .use(security.errorHandler) // Error handling
+  // .use(cors({
+  //   origin: (ctx) => {
+  //     const origin = ctx.headers.origin;
+  //     // Allow requests with no origin (like mobile apps or curl requests)
+  //     if (!origin) return '*';
+  //     // Check if origin is in whitelist
+  //     if (allowedOrigins.includes(origin)) {
+  //       return origin;
+  //     }
+  //     // In development, allow localhost variations
+  //     if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost')) {
+  //       return origin;
+  //     }
+  //     return false;
+  //   },
+  //   credentials: true,
+  //   maxAge: 86400 // 24 hours
+  // }))
+  // .use(security.rateLimit) // Rate limiting
   .use(bodyParser({
     enableTypes: ['json', 'form', 'text'],
     jsonLimit: '10mb',
@@ -163,7 +186,8 @@ app
     textLimit: '10mb'
   }))
   .use(router.routes())
-  .use(router.allowedMethods());
+  .use(router.allowedMethods())
+  .use(serve(WEBROOT + 'vue/dist'));
 
 server.timeout = config.api.timeout || 120000;
 server.on('request', app.callback());
