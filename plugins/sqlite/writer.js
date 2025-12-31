@@ -41,6 +41,14 @@ Store.prototype.upsertTables = function() {
       );
     `,
 
+    // Speed up common range queries used by candleLoader/getCandles.
+    // `start` is UNIQUE (and thus indexed), but the explicit index helps keep intent clear
+    // and safeguards performance if schema changes in the future.
+    `
+      CREATE INDEX IF NOT EXISTS ${sqliteUtil.table('candles')}_start_idx
+      ON ${sqliteUtil.table('candles')}(start);
+    `,
+
     // TODO: create trades
     // ``
 
