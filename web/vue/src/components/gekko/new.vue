@@ -28,7 +28,6 @@
 <script>
 
 import _ from 'lodash'
-import Vue from 'vue'
 import { post, get } from '../../tools/ajax'
 import { bus } from '../global/ws'
 import gekkoConfigBuilder from './gekkoConfigBuilder.vue'
@@ -55,7 +54,7 @@ export default {
     },
     watchConfig: function() {
       let raw = _.pick(this.config, 'watch', 'candleWriter');
-      let watchConfig = Vue.util.extend({}, raw);
+      let watchConfig = Object.assign({}, raw);
       watchConfig.type = 'market watcher';
       watchConfig.mode = 'realtime';
       return watchConfig;
@@ -82,7 +81,7 @@ export default {
         startAt = moment.unix(Math.max(optimal, available)).utc().format();
       }
 
-      const gekkoConfig = Vue.util.extend({
+      const gekkoConfig = Object.assign({
         market: {
           type: 'leech',
           from: startAt
@@ -92,7 +91,7 @@ export default {
       return gekkoConfig;
     },
     existingMarketWatcher: function() {
-      const market = Vue.util.extend({}, this.watchConfig.watch);
+      const market = Object.assign({}, this.watchConfig.watch);
       return _.find(this.gekkos, {config: {watch: market}});
     },
     exchange: function() {

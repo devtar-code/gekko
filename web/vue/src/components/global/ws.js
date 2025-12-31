@@ -1,12 +1,30 @@
 import _ from 'lodash'
-import Vue from 'vue'
-
 import { wsPath } from '../../tools/api'
 import initializeState from '../../store/init'
 
 var socket = null;
 
-export const bus = new Vue();
+// Simple event emitter for Vue 3 compatibility
+class EventEmitter {
+  constructor() {
+    this.events = {};
+  }
+
+  $on(event, callback) {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    this.events[event].push(callback);
+  }
+
+  $emit(event, data) {
+    if (this.events[event]) {
+      this.events[event].forEach(callback => callback(data));
+    }
+  }
+}
+
+export const bus = new EventEmitter();
 
 bus.$on('gekko_update', data => console.log(data))
 
