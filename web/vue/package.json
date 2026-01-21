@@ -18,7 +18,7 @@
     "vue-router": "^4.2.5",
     "vuex": "^4.1.0",
     "axios": "^1.6.2",
-    "dayjs": "^1.11.10"
+    "dayjs": "^1.11.19"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
